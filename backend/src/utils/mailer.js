@@ -44,7 +44,11 @@ async function sendMail({ to, subject, text, html }) {
   if (isProduction) {
     throw new Error('Email delivery is not configured. Set SMTP_HOST, SMTP_USER and SMTP_PASS.');
   }
-  console.log(`[mailer] SMTP not configured; would have sent to ${to}: ${subject}\n${text}`);
+  // Line breaks are stripped from anything a user can influence before it is logged, so it cannot forge extra log lines.
+  const oneLine = (v) => String(v).replace(/\n|\r/g, '');
+  // Each body line is cleaned and logged on its own, indented, so text typed by a user cannot pass for a log entry.
+  const bodyLines = String(text).split(/\r?\n/).map((line) => `    ${oneLine(line)}`).join('\n');
+  console.log(`[mailer] SMTP not configured; would have sent to ${oneLine(to)}: ${oneLine(subject)}\n${bodyLines}`);
   if (testInbox) testInbox.set(to, { subject, text, at: new Date().toISOString() });
   return { delivered: false };
 }

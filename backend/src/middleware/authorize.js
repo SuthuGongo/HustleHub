@@ -8,9 +8,9 @@ function authorize(...allowedRoles) {
       return next(new AppError('Authentication required.', 401));
     }
     if (!allowedRoles.includes(req.user.role)) {
-      console.warn(
-        `[SECURITY] Forbidden: user=${req.user.id} role=${req.user.role} ${req.method} ${req.originalUrl}`
-      );
+      // Line breaks are stripped from the URL so a crafted request cannot forge extra log lines.
+      const safeUrl = req.originalUrl.replace(/\n|\r/g, '');
+      console.warn(`[SECURITY] Forbidden: user=${req.user.id} role=${req.user.role} ${req.method} ${safeUrl}`);
       return next(new AppError('You do not have permission to perform this action.', 403));
     }
     return next();
