@@ -5,17 +5,10 @@ const selfsigned = require('selfsigned');
 const CERTS_DIR = path.join(__dirname, '..', 'certs');
 
 async function main() {
-  if (!fs.existsSync(CERTS_DIR)) {
-    fs.mkdirSync(CERTS_DIR, { recursive: true });
-  }
+  fs.mkdirSync(CERTS_DIR, { recursive: true });
 
   const keyPath = path.join(CERTS_DIR, 'key.pem');
   const certPath = path.join(CERTS_DIR, 'cert.pem');
-
-  if (fs.existsSync(keyPath) && fs.existsSync(certPath)) {
-    console.log('Certificate already exists at backend/certs/. Delete the files there first if you want to regenerate.');
-    return;
-  }
 
   const notAfter = new Date();
   notAfter.setDate(notAfter.getDate() + 365);
@@ -35,8 +28,18 @@ async function main() {
     ],
   });
 
-  fs.writeFileSync(keyPath, pems.private);
-  fs.writeFileSync(certPath, pems.cert);
+  // The 'wx' flag creates each file only if it does not already exist, so there is no gap between
+  // checking and writing for another process to slip into. An existing certificate is left untouched.
+  try {
+    fs.writeFileSync(keyPath, pems.private, { flag: 'wx', mode: 0o600 });
+    fs.writeFileSync(certPath, pems.cert, { flag: 'wx' });
+  } catch (err) {
+    if (err.code === 'EEXIST') {
+      console.log('Certificate already exists at backend/certs/. Delete the files there first if you want to regenerate.');
+      return;
+    }
+    throw err;
+  }
 
   console.log('Self-signed certificate generated:');
   console.log(`  ${keyPath}`);
