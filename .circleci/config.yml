@@ -73,7 +73,7 @@ jobs:
               -Dsonar.scm.disabled=true \
               -Dsonar.javascript.lcov.reportPaths=backend/coverage/lcov.info,frontend/coverage/lcov.info \
               -Dsonar.coverage.exclusions="backend/scripts/**,**/*.config.js,frontend/src/main.jsx" \
-              -Dsonar.exclusions="**/node_modules/**,**/dist/**,**/public/**,**/*.test.js,**/*.test.jsx,frontend/src/test/**,postman/**"
+              -Dsonar.exclusions="**/node_modules/**,**/dist/**,**/public/**,**/*.test.js,**/*.test.jsx,frontend/src/test/**,frontend/src/assets/**,postman/**"
 
 workflows:
   sonarcloud-analysis:
