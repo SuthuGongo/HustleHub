@@ -39,7 +39,7 @@ async function listGigs(req, res, next) {
     const { q, category, minPrice, maxPrice, sort = 'newest', page = 1, limit = 12 } = req.query;
 
     const filter = { isActive: true };
-    if (category) filter.category = category;
+    if (category) filter.category = { $eq: category };
     if (minPrice !== undefined || maxPrice !== undefined) {
       const range = {};
       if (minPrice !== undefined) range.$gte = minPrice;

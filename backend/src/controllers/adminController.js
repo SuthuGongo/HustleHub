@@ -20,7 +20,7 @@ const withPeople = (query) => query.populate('client', 'name').populate('freelan
 // so "aisha" finds "Aisha Naidoo" and "@gmail" finds every Gmail address, without needing an exact match.
 async function listUsers(req, res, next) {
   try {
-    const filter = req.query.role ? { role: req.query.role } : {};
+    const filter = req.query.role ? { role: { $eq: req.query.role } } : {};
     if (req.query.search) {
       const rx = containsRegex(req.query.search);
       filter.$or = [{ name: rx }, { email: rx }];
@@ -283,7 +283,7 @@ async function getStats(req, res, next) {
 // so the filter chips stay meaningful even while searching.
 async function listMessages(req, res, next) {
   try {
-    const filter = req.query.status ? { status: req.query.status } : {};
+    const filter = req.query.status ? { status: { $eq: req.query.status } } : {};
     if (req.query.search) {
       const rx = containsRegex(req.query.search);
       filter.$or = [{ name: rx }, { email: rx }, { message: rx }, { reference: rx }];

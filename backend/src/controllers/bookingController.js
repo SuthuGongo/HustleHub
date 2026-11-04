@@ -28,7 +28,7 @@ async function createBooking(req, res, next) {
   try {
     const { gigId, notes = '' } = req.body;
 
-    const gig = await Gig.findById(gigId);
+    const gig = await Gig.findOne({ _id: { $eq: gigId } });
     if (!gig || !gig.isActive) {
       return next(new AppError('This gig is not available for booking.', 404));
     }
