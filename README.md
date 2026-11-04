@@ -28,6 +28,7 @@ A secure freelance marketplace built with the **MERN** stack (MongoDB, Express, 
 12. [Escrow: holding funds until confirmed or reviewed](#12-escrow-holding-funds-until-confirmed-or-reviewed)
 13. [Design decisions, trade-offs and known limitations](#13-design-decisions-trade-offs-and-known-limitations)
 14. [Income dashboard and tax estimate](#14-income-dashboard-and-tax-estimate)
+15. [Static code analysis](#15-static-code-analysis)
 
 ---
 
@@ -66,7 +67,7 @@ Anyone can register as a client or freelancer. **Admin accounts cannot be create
 - A plain, professional interface: a flat warm background, white cards with hairline borders, one deep-green accent colour, and no gradients, glows or floating decoration. Details that remain: the login/register card closes in on its cut corners and reopens as the other form, gig cards use a flat muted colour and icon per category, an income total that counts up, a perforated receipt ticket, and a payment card that fills in live as you type. All motion respects `prefers-reduced-motion`
 - **Escrow-style payments.** A booking's money isn't simply "paid" the instant it's created - it's held by the platform (`escrowStatus: 'held'`), and only reaches the freelancer once the client confirms the work or a configurable review window quietly expires. See [section 12](#12-escrow-holding-funds-until-confirmed-or-reviewed) for the full lifecycle
 - Security controls throughout: validation, sanitisation, rate limiting, Helmet + Content Security Policy, HTTPS, safe error handling
-- Automated tests: a 427-request Postman/Newman API suite (1,883 assertions), 37 backend unit tests (Jest) and 358 frontend tests across 29 files (Vitest + React Testing Library)
+- Automated tests: a 427-request Postman/Newman API suite (1,883 assertions), 41 backend unit tests (Jest) and 358 frontend tests across 29 files (Vitest + React Testing Library)
 
 ## 3. Architecture
 
@@ -764,3 +765,27 @@ Because the rebate cancels the first bracket's tax up to R99,000 (17,820 / 18%),
 **API.** `GET /api/transactions/income` (freelancer only) returns the figures above plus a `tax` object containing the working (`grossTax`, `marginalRate`, `bracketNumber`, `bracketFloor`, `bracketBase`, `nextBracketAt`, `taxFreeThreshold`, the bracket table, and `monthly` income). The monthly figures and the tax-year total come from the same query, so the chart and the tax figure cannot disagree.
 
 **Tested by:** 15+ unit tests for the tax maths (bracket boundaries, rebate floor, tax-year rollover, monthly totals), a unit test that a refund removes the money from the totals, Postman assertions on the income endpoint and a refund scenario (income R1000, refund, income R500), and frontend tests for each part of the page.
+
+## 15. Static code analysis
+
+Two tools scan the code on every push, and a failing result fails the pipeline.
+
+| Tool | What it checks | Where it runs | Where to see the result |
+|---|---|---|---|
+| ESLint with `eslint-plugin-security` (backend and frontend) | Unsafe patterns such as unsanitised regular expressions, dynamic object access, and React hook mistakes | The `Static analysis` job in `.github/workflows/ci.yml` | The job log in the Actions tab |
+| CodeQL (`security-and-quality` queries) | Data-flow security problems such as injection, unsafe logging and disabled certificate checks | `.github/workflows/codeql.yml` | Security and quality, Code scanning |
+
+The first CodeQL run reported 17 alerts. All 17 were fixed in the code, and a re-scan with the same query set reports none.
+
+| Alert | Where | Fix |
+|---|---|---|
+| Database query built from user-controlled sources (11 alerts) | Login, registration, password reset, booking, conversations, gig browsing, admin user and message lists | Every user-supplied value used in a query is wrapped in `$eq`, so it can only ever be compared as a value and never be read as a query operator such as `$ne` or `$gt`. This sits on top of the existing input sanitiser, validators and `sanitizeFilter` |
+| Disabling certificate validation | `scripts/runNewman.js` | The API test runner no longer turns TLS verification off. It trusts the locally generated certificate instead |
+| Incomplete string escaping | `AdminPage.jsx` | The mail link replaced only the first `%40`. It now replaces every occurrence |
+| Remote property injection | `middleware/sanitizeInput.js` | Properties are now removed with `Reflect.deleteProperty` while iterating over own entries, instead of through a computed key |
+| Potential file system race condition | `scripts/generateCert.js` | The key and certificate files are created with the exclusive `wx` flag, so there is no gap between checking and writing |
+| Log injection (2 alerts) | `middleware/authorize.js`, `utils/mailer.js` | Line breaks are removed from anything a user can influence before it is written to a log line, so a crafted URL, address or message cannot forge extra log entries. A unit test covers the URL case |
+
+ESLint reports a small number of warnings from `eslint-plugin-security` (for example `detect-non-literal-regexp`). These are reviewed rather than ignored: the search helper escapes every regular-expression special character before building a pattern, and the remaining ones are on fixed, non-user input.
+
+The dependency audit job (`npm audit --audit-level=high`) fails the pipeline if any package that ships to production has a known high or critical vulnerability. Both apps currently report none.
