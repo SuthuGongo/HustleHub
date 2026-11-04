@@ -1,0 +1,175 @@
+name: CI
+
+# Runs on every push and pull request so broken code is caught before it reaches main.
+# A job (or any step inside it) failing marks the whole workflow run red and blocks the merge
+# checkmark on a PR - that is what "must fail on test/check failure" means in practice here.
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: [main]
+  workflow_dispatch: {}
+
+# A CI-only secret. This is NOT a real JWT signing key for the live app - it only exists so the
+# backend's env validation (src/config/env.js) and the test server it spins up have something
+# non-placeholder to use. It is committed in plain text deliberately, the same way the project's
+# own postman/HustleHub-Local.postman_environment.json ships a local test admin password.
+env:
+  CI_JWT_SECRET: ci-only-test-secret-${{ github.run_id }}-not-used-anywhere-real
+
+jobs:
+  static-analysis:
+    name: Static analysis - ESLint (backend + frontend)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      # eslint:recommended + eslint-plugin-security on both apps, plus React-specific rules on the
+      # frontend. Configured to fail only on real errors - see backend/eslint.config.js and
+      # frontend/eslint.config.js for what's deliberately scoped down and why. Findings are explained
+      # in the README's static analysis section.
+      - name: Lint backend
+        working-directory: backend
+        run: npm run lint
+
+      - name: Lint frontend
+        working-directory: frontend
+        run: npm run lint
+
+  dependency-audit:
+    name: Security - dependency vulnerability audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # Fails the run if any package that ships to production has a known high or critical
+      # vulnerability (npm's advisory database). Backend dev-only tools (Newman) are excluded because
+      # they never reach the deployed app.
+      - name: Audit backend dependencies (production)
+        working-directory: backend
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Audit frontend dependencies
+        working-directory: frontend
+        run: npm audit --audit-level=high
+
+  backend:
+    name: Backend - install, unit tests, API tests, build
+    runs-on: ubuntu-latest
+
+    # A real MongoDB instance for the Newman/Postman API suite, which exercises the full
+    # request/response cycle (auth, bookings, payments, etc.) against a running server - not
+    # something that can be faked with an in-memory mock.
+    services:
+      mongodb:
+        image: mongo:7
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --eval 'db.runCommand({ ping: 1 })' --quiet"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        run: npm ci
+
+      - name: Run backend unit tests (Jest)
+        run: npm run test:unit
+        env:
+          JWT_SECRET: ${{ env.CI_JWT_SECRET }}
+          MONGODB_URI: mongodb://127.0.0.1:27017/hustlehub
+
+      - name: Generate local TLS certificate for the test server
+        run: npm run gen-cert
+
+      - name: Run backend API tests (Newman / Postman)
+        run: npm run test:api
+        env:
+          JWT_SECRET: ${{ env.CI_JWT_SECRET }}
+          MONGODB_URI: mongodb://127.0.0.1:27017/hustlehub
+
+      - name: Upload Newman report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: newman-report
+          path: postman/reports/
+          retention-days: 14
+
+      - name: Build backend (load-time smoke check)
+        run: npm run build
+        env:
+          JWT_SECRET: ${{ env.CI_JWT_SECRET }}
+          MONGODB_URI: mongodb://127.0.0.1:27017/hustlehub
+
+  frontend:
+    name: Frontend - install, tests, build
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Run frontend tests (Vitest)
+        run: npm run test
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Upload frontend build
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist/
+          retention-days: 14
