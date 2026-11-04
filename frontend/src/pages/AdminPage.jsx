@@ -450,7 +450,7 @@ const MESSAGE_FILTERS = [
 const STATUS_TONE = { new: 'good', read: 'neutral', resolved: 'muted' };
 
 // The address goes through encodeURIComponent so odd characters in it can never add extra mail headers.
-const replyLink = (m) => `mailto:${encodeURIComponent(m.email).replace('%40', '@')}?subject=${encodeURIComponent(`Re: HustleHub+ ${m.reference}`)}`;
+const replyLink = (m) => `mailto:${encodeURIComponent(m.email).replace(/%40/g, '@')}?subject=${encodeURIComponent(`Re: HustleHub+ ${m.reference}`)}`;
 
 function ReplyThread({ replies }) {
   if (!replies || replies.length === 0) return null;
