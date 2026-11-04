@@ -44,9 +44,7 @@ jobs:
               -Dsonar.host.url=https://sonarcloud.io \
               -Dsonar.branch.name="$SONAR_BRANCH" \
               -Dsonar.sources=backend/src,backend/scripts,frontend/src \
-              -Dsonar.tests=frontend/src/test \
-              -Dsonar.test.inclusions="**/*.test.js,**/*.test.jsx" \
-              -Dsonar.exclusions="**/node_modules/**,**/dist/**,**/public/**,**/*.test.js,**/*.test.jsx,postman/**"
+              -Dsonar.exclusions="**/node_modules/**,**/dist/**,**/public/**,**/*.test.js,**/*.test.jsx,frontend/src/test/**,postman/**"
 
 workflows:
   sonarcloud-analysis:
