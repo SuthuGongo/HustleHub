@@ -1,5 +1,6 @@
-# CircleCI pipeline for the SonarCloud analysis, following the lecturer's guide
-# (build_app -> sonarqube). Adapted to HustleHub+: this repo has backend/ and frontend/
+# CircleCI pipeline for the SonarCloud analysis, following the lecturer's guide (build, then
+# sonarqube). The build step here installs, runs the tests with coverage, and hands the coverage
+# reports to the scan. Adapted to HustleHub+: this repo has backend/ and frontend/
 # instead of the guide's root + server/ layout, and needs Node 22 (Vite 8 / Vitest 5).
 #
 # Needs three environment variables set in CircleCI (Project Settings -> Environment Variables):
@@ -7,10 +8,14 @@
 version: 2.1
 
 jobs:
-  build_app:
+  # Runs every test suite with coverage switched on and keeps the coverage reports for the scan.
+  # Installs with --ignore-scripts (no package may run code at install time). A MongoDB container
+  # runs alongside, because the API test suite exercises the real server against a real database.
+  test_and_coverage:
     working_directory: ~/build
     docker:
       - image: cimg/node:22.12
+      - image: mongo:7
     steps:
       - checkout
       - run:
@@ -18,10 +23,27 @@ jobs:
           command: |
             cd backend && npm ci --ignore-scripts
             cd ../frontend && npm ci --ignore-scripts
+      - run:
+          name: Backend API tests with coverage
+          command: |
+            cd backend
+            npm run gen-cert
+            npm run test:api:coverage
+          environment:
+            JWT_SECRET: circleci-only-test-secret-not-used-anywhere-real-0123456789
+            MONGODB_URI: mongodb://127.0.0.1:27017/hustlehub
+      - run:
+          name: Frontend tests with coverage
+          command: |
+            cd frontend
+            npm run test:coverage
+            # SonarCloud scans from the repository root, so make the file paths root-relative.
+            sed -i 's#^SF:#SF:frontend/#' coverage/lcov.info
       - persist_to_workspace:
           root: ~/build
           paths:
-            - .
+            - backend/coverage/lcov.info
+            - frontend/coverage/lcov.info
 
   sonarqube:
     working_directory: ~/build
@@ -47,12 +69,14 @@ jobs:
               -Dsonar.branch.name="$SONAR_BRANCH" \
               -Dsonar.sources=backend/src,backend/scripts,frontend/src \
               -Dsonar.scm.disabled=true \
+              -Dsonar.javascript.lcov.reportPaths=backend/coverage/lcov.info,frontend/coverage/lcov.info \
+              -Dsonar.coverage.exclusions="backend/scripts/**,**/*.config.js,frontend/src/main.jsx" \
               -Dsonar.exclusions="**/node_modules/**,**/dist/**,**/public/**,**/*.test.js,**/*.test.jsx,frontend/src/test/**,postman/**"
 
 workflows:
   sonarcloud-analysis:
     jobs:
-      - build_app
+      - test_and_coverage
       - sonarqube:
           requires:
-            - build_app
+            - test_and_coverage

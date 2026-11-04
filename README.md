@@ -801,3 +801,5 @@ The dependency audit job (`npm audit --audit-level=high`) fails the pipeline if 
 | Promise not awaited (3 issues) | `BookingDialog.jsx` (2), `MyGigsPage.jsx` | The promises are explicitly marked as intentionally not awaited with `void` |
 | Radio group not focusable | `StarRating.jsx` | The group is now focusable, while each star button keeps its own keyboard handling |
 
+
+**Coverage and the quality gate.** SonarCloud's default quality gate (Sonar way) requires at least 80% test coverage on new code. The CircleCI pipeline therefore runs the test suites with coverage switched on before the scan: the backend API tests (`npm run test:api:coverage`, which runs the real server under the Newman collection against a MongoDB container and records coverage) and the frontend tests (`npm run test:coverage`). Both reports are passed to the scanner. Measured coverage is about 92% of backend lines and 87% of frontend lines. Scripts, configuration files and the frontend entry file are excluded from coverage because they are not application logic.
