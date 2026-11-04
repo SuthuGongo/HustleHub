@@ -768,10 +768,11 @@ Because the rebate cancels the first bracket's tax up to R99,000 (17,820 / 18%),
 
 ## 15. Static code analysis
 
-Two tools scan the code on every push, and a failing result fails the pipeline.
+Three tools scan the code on every push, and a failing result fails the pipeline.
 
 | Tool | What it checks | Where it runs | Where to see the result |
 |---|---|---|---|
+| SonarCloud | Bugs, security vulnerabilities, security hotspots and code smells, with a pass or fail quality gate | Runs on every push to `main` | The SonarCloud project dashboard for `SuthuGongo_HustleHub` |
 | ESLint with `eslint-plugin-security` (backend and frontend) | Unsafe patterns such as unsanitised regular expressions, dynamic object access, and React hook mistakes | The `Static analysis` job in `.github/workflows/ci.yml` | The job log in the Actions tab |
 | CodeQL (`security-and-quality` queries) | Data-flow security problems such as injection, unsafe logging and disabled certificate checks | `.github/workflows/codeql.yml` | Security and quality, Code scanning |
 
@@ -789,3 +790,14 @@ The first CodeQL run reported 17 alerts. All 17 were fixed in the code, and a re
 ESLint reports a small number of warnings from `eslint-plugin-security` (for example `detect-non-literal-regexp`). These are reviewed rather than ignored: the search helper escapes every regular-expression special character before building a pattern, and the remaining ones are on fixed, non-user input.
 
 The dependency audit job (`npm audit --audit-level=high`) fails the pipeline if any package that ships to production has a known high or critical vulnerability. Both apps currently report none.
+
+**SonarCloud findings and fixes.** The first SonarCloud analysis reported 21 issues (14 security, 7 reliability) and 0 security hotspots. Each was addressed:
+
+| Finding | Where | Fix |
+|---|---|---|
+| NoSQL injection from unsanitised input (10 issues) | Controllers for login, registration, password reset, booking, conversations, gigs and the admin lists | Values taken from a request are converted to a plain string or number before they reach a query, in addition to the `$eq` wrapper above. The input sanitiser and validators already reject operator objects before a controller runs |
+| Install scripts allowed to run during package installation (4 issues) | `.github/workflows/ci.yml` | Dependencies are installed with `npm ci --ignore-scripts`, so a compromised package cannot run code at install time. Tests and builds were re-run to confirm nothing depended on those scripts |
+| Regular expression with super-linear runtime (3 issues) | Email check in `frontend/src/utils/validation.js` and `backend/scripts/seedAdmin.js`; database address handling in `backend/scripts/runNewman.js` | The email check is now a short function that splits the address instead of a backtracking pattern, and the address handling uses a simpler pattern |
+| Promise not awaited (3 issues) | `BookingDialog.jsx` (2), `MyGigsPage.jsx` | The promises are explicitly marked as intentionally not awaited with `void` |
+| Radio group not focusable | `StarRating.jsx` | The group is now focusable, while each star button keeps its own keyboard handling |
+
