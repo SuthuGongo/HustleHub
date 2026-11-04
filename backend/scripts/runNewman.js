@@ -15,7 +15,7 @@ const newman = require('newman');
 const backendDir = path.join(__dirname, '..');
 const postmanDir = path.join(backendDir, '..', 'postman');
 const reportsDir = path.join(postmanDir, 'reports');
-const collectionPath = path.join(postmanDir, 'HustleHub-Part2.postman_collection.json');
+const collectionPath = path.join(postmanDir, 'HustleHub.postman_collection.json');
 const environmentPath = path.join(postmanDir, 'HustleHub-Local.postman_environment.json');
 
 const TEST_PORT = Number(process.env.TEST_HTTPS_PORT) || 5444;

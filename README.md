@@ -2,13 +2,13 @@
 
 A secure freelance marketplace built with the **MERN** stack (MongoDB, Express, React, Node.js). Freelancers advertise services ("gigs"), clients browse and book them, and every booking produces a transaction record so freelancers can see what they have earned.
 
-> **Status: Part 2 – Secure Stack.** Part 1 delivered the secure authentication backend. Part 2 (this version) adds the MongoDB database, marketplace features, role-based access control, hardened security controls, the React frontend and automated tests. Part 3 will add tax estimates, the financial dashboard, logging, Docker and CI/CD.
+> **Status: Final POE submission.** A secure freelance marketplace with escrow payments, an income and tax dashboard, automated testing, a CI/CD pipeline, static analysis, Docker, logging and a final security review.
 
 | | |
 |---|---|
 | **Team (Group 1)** | Gongo Nobesuthu (ST10545758) · Yanga Bulane (ST10546237) · Sphamandla Godwill Nyanda (ST10543720) |
-| **GitHub** | https://github.com/SG-NYANDA/HustleHub-.git |
-| **Part 2 demo video** | https://youtu.be/B9SPJAS1410?si=BYKNhRlxuMm34qSe |
+| **GitHub** | https://github.com/SuthuGongo/HustleHub |
+| **Demo video** | Link to be added |
 
 ---
 
@@ -306,7 +306,7 @@ hustlehub-plus/
 │   │   └── test/                Vitest + React Testing Library tests
 │   └── vite.config.js           HTTPS dev/preview server, /api proxy, security headers
 └── postman/
-    ├── HustleHub-Part2.postman_collection.json   Part 2 suite (used by Newman)
+    ├── HustleHub.postman_collection.json         API test suite (used by Newman)
     ├── HustleHub-Local.postman_environment.json
     └── reports/                 Newman HTML/JSON reports (generated, git-ignored)
 ```
@@ -554,7 +554,7 @@ None of these show stack traces, file paths or raw server responses; only the AP
 
 ### 9.1 Backend API tests (Postman + Newman)
 
-The suite lives in `postman/HustleHub-Part2.postman_collection.json`: **314 requests** (more once the rate-limit requests execute - a handful deliberately repeat until they receive `429`), organised into folders. Run `npm run test:api` for the exact current request/assertion counts and pass/fail result from your own machine and database - the numbers below describe what each folder proves, not a specific historical run:
+The suite lives in `postman/HustleHub.postman_collection.json`: **314 requests** (more once the rate-limit requests execute - a handful deliberately repeat until they receive `429`), organised into folders. Run `npm run test:api` for the exact current request/assertion counts and pass/fail result from your own machine and database - the numbers below describe what each folder proves, not a specific historical run:
 
 | Folder | What it proves |
 |---|---|
