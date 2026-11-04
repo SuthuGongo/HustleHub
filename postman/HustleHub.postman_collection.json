@@ -8620,7 +8620,7 @@
                 "exec": [
                   "pm.test(\"Status is 200\", function () { pm.response.to.have.status(200); });",
                   "const json = pm.response.json();",
-                  "pm.test(\"Platform totals present\", function () { pm.expect(json.data.users.total).to.be.at.least(5); pm.expect(json.data.transactions.count).to.be.at.least(2); pm.expect(json.data.transactions.volume).to.be.at.least(1000); });",
+                  "pm.test(\"Platform totals present (refunded payments are not counted as volume)\", function () { pm.expect(json.data.users.total).to.be.at.least(5); pm.expect(json.data.transactions.count).to.be.at.least(2); pm.expect(json.data.transactions.volume).to.be.at.least(500); });",
                   "pm.test(\"User roles are broken down, including how many are new this week\", function () { pm.expect(json.data.users.freelancers).to.be.a(\"number\"); pm.expect(json.data.users.clients).to.be.a(\"number\"); pm.expect(json.data.users.admins).to.be.at.least(1); pm.expect(json.data.users.newThisWeek).to.be.a(\"number\"); });",
                   "pm.test(\"Gigs are broken down by category\", function () { pm.expect(json.data.gigs.byCategory).to.be.an(\"object\"); pm.expect(json.data.gigs.byCategory.design).to.be.at.least(1); });",
                   "pm.test(\"Bookings are broken down by status\", function () { pm.expect(json.data.bookings.byStatus).to.be.an(\"object\"); });",
