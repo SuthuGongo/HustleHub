@@ -78,7 +78,7 @@ export default function BookingDialog({ gig, onClose }) {
     if (step !== STEPS.VERIFYING) return undefined;
     let cancelled = false;
 
-    (async () => {
+    void (async () => {
       await new Promise((resolve) => setTimeout(resolve, VERIFY_MS));
       if (cancelled) return;
 
@@ -108,7 +108,7 @@ export default function BookingDialog({ gig, onClose }) {
     if (step !== STEPS.DONE || !conversationId) return undefined;
     let cancelled = false;
 
-    (async () => {
+    void (async () => {
       await new Promise((resolve) => setTimeout(resolve, REDIRECT_MS));
       if (cancelled) return;
       navigate(`/messages/${conversationId}`, { state: { justPaid: true, gigTitle: title } });

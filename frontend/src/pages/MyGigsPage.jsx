@@ -127,7 +127,7 @@ export default function MyGigsPage() {
                     <button
                       type="button"
                       className="btn btn-danger"
-                      onClick={() => { setConfirmDeleteId(null); run(() => api.deleteGig(gig.id), 'Gig deleted.'); }}
+                      onClick={() => { setConfirmDeleteId(null); void run(() => api.deleteGig(gig.id), 'Gig deleted.'); }}
                     >
                       Confirm delete
                     </button>
