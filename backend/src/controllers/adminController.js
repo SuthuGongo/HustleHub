@@ -64,7 +64,9 @@ async function listAllGigs(req, res, next) {
     if (req.query.search) {
       const rx = containsRegex(String(req.query.search));
       const matchingFreelancers = await User.find({ name: rx }).select('_id');
-      filter.$or = [{ title: rx }, { freelancer: { $in: matchingFreelancers.map((u) => u._id) } }];
+      // $in is built here from ids we looked up ourselves, not from user input, so it is marked trusted
+      // (see gigController.js for why the sanitizeFilter setting makes that necessary).
+      filter.$or = [{ title: rx }, { freelancer: mongoose.trusted({ $in: matchingFreelancers.map((u) => u._id) }) }];
     }
     const gigs = await Gig.find(filter).sort({ createdAt: -1 }).limit(500).populate('freelancer', 'name');
     res.status(200).json({ success: true, data: { gigs } });
@@ -95,7 +97,7 @@ async function listAllTransactions(req, res, next) {
       const rx = containsRegex(String(req.query.search));
       const matchingUsers = await User.find({ name: rx }).select('_id');
       const userIds = matchingUsers.map((u) => u._id);
-      filter.$or = [{ reference: rx }, { gigTitle: rx }, { client: { $in: userIds } }, { freelancer: { $in: userIds } }];
+      filter.$or = [{ reference: rx }, { gigTitle: rx }, { client: mongoose.trusted({ $in: userIds }) }, { freelancer: mongoose.trusted({ $in: userIds }) }];
     }
     const transactions = await Transaction.find(filter)
       .sort({ createdAt: -1 })
