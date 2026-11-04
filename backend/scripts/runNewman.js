@@ -16,6 +16,7 @@ const backendDir = path.join(__dirname, '..');
 const postmanDir = path.join(backendDir, '..', 'postman');
 const reportsDir = path.join(postmanDir, 'reports');
 const collectionPath = path.join(postmanDir, 'HustleHub.postman_collection.json');
+const certPath = path.join(backendDir, 'certs', 'cert.pem'); // the locally generated certificate the test server uses
 const environmentPath = path.join(postmanDir, 'HustleHub-Local.postman_environment.json');
 
 const TEST_PORT = Number(process.env.TEST_HTTPS_PORT) || 5444;
@@ -39,7 +40,7 @@ function waitForHealth(timeoutMs = 20000) {
   const started = Date.now();
   return new Promise((resolve, reject) => {
     const attempt = () => {
-      const req = https.get(`${baseUrl}/health`, { rejectUnauthorized: false }, (res) => {
+      const req = https.get(`${baseUrl}/health`, { ca: fs.readFileSync(certPath) }, (res) => {
         res.resume();
         res.statusCode === 200 ? resolve() : retry();
       });
@@ -100,7 +101,7 @@ async function main() {
         collection: collectionPath,
         environment: environmentPath,
         envVar: [{ key: 'baseUrl', value: baseUrl }],
-        insecure: true, // local self-signed certificate
+        sslExtraCaCerts: certPath, // trust the local self-signed certificate; verification stays on
         reporters: ['cli', 'htmlextra', 'json'],
         reporter: {
           htmlextra: { export: path.join(reportsDir, 'newman-report.html'), title: 'HustleHub+ API Test Report' },
