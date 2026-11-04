@@ -1,0 +1,57 @@
+# CircleCI pipeline for the SonarCloud analysis, following the lecturer's guide
+# (build_app -> sonarqube). Adapted to HustleHub+: this repo has backend/ and frontend/
+# instead of the guide's root + server/ layout, and needs Node 22 (Vite 8 / Vitest 5).
+#
+# Needs three environment variables set in CircleCI (Project Settings -> Environment Variables):
+#   SONAR_TOKEN, SONAR_ORG, SONAR_PROJECT_KEY
+version: 2.1
+
+jobs:
+  build_app:
+    working_directory: ~/build
+    docker:
+      - image: cimg/node:22.12
+    steps:
+      - checkout
+      - run:
+          name: Install Dependencies
+          command: |
+            cd backend && npm ci
+            cd ../frontend && npm ci
+      - persist_to_workspace:
+          root: ~/build
+          paths:
+            - .
+
+  sonarqube:
+    working_directory: ~/build
+    docker:
+      - image: sonarsource/sonar-scanner-cli
+    resource_class: small
+    steps:
+      - checkout
+      - attach_workspace:
+          at: ~/build
+      - run:
+          name: Analyze Code Quality & Security
+          # SONAR_TOKEN is read from the environment by the scanner, so it is not passed with
+          # -Dsonar.login (deprecated in newer scanner versions).
+          command: |
+            SONAR_BRANCH="${CIRCLE_BRANCH:-main}"
+            sonar-scanner \
+              -Dsonar.projectKey="$SONAR_PROJECT_KEY" \
+              -Dsonar.organization="$SONAR_ORG" \
+              -Dsonar.host.url=https://sonarcloud.io \
+              -Dsonar.branch.name="$SONAR_BRANCH" \
+              -Dsonar.sources=backend/src,backend/scripts,frontend/src \
+              -Dsonar.tests=frontend/src/test \
+              -Dsonar.test.inclusions="**/*.test.js,**/*.test.jsx" \
+              -Dsonar.exclusions="**/node_modules/**,**/dist/**,**/public/**,**/*.test.js,**/*.test.jsx,postman/**"
+
+workflows:
+  sonarcloud-analysis:
+    jobs:
+      - build_app
+      - sonarqube:
+          requires:
+            - build_app
