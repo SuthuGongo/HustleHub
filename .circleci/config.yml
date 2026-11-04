@@ -1,7 +1,7 @@
 # CircleCI pipeline for the SonarCloud analysis, following the lecturer's guide (build, then
 # sonarqube). The build step here installs, runs the tests with coverage, and hands the coverage
 # reports to the scan. Adapted to HustleHub+: this repo has backend/ and frontend/
-# instead of the guide's root + server/ layout, and needs Node 22 (Vite 8 / Vitest 5).
+# instead of the guide's root + server/ layout, and needs a recent Node (Vite 8 / Vitest 5).
 #
 # Needs three environment variables set in CircleCI (Project Settings -> Environment Variables):
 #   SONAR_TOKEN, SONAR_ORG, SONAR_PROJECT_KEY
@@ -14,7 +14,9 @@ jobs:
   test_and_coverage:
     working_directory: ~/build
     docker:
-      - image: cimg/node:22.12
+      # Needs Node 22.15 or newer: the frontend test tools load undici, which uses zstd support
+      # that older Node 22 releases (such as 22.12) do not have. The lts tag follows the current LTS.
+      - image: cimg/node:lts
       - image: mongo:7
     steps:
       - checkout
