@@ -12,6 +12,11 @@ const https = require('https');
 const { spawn, spawnSync } = require('child_process');
 const newman = require('newman');
 
+// `npm run test:api:coverage` also records which lines of the API the requests ran (V8 coverage on the
+// server process), then writes backend/coverage/lcov.info for SonarCloud.
+const withCoverage = process.argv.includes('--coverage');
+const coverageTmpDir = path.join(__dirname, '..', 'coverage', 'tmp');
+
 const backendDir = path.join(__dirname, '..');
 const postmanDir = path.join(backendDir, '..', 'postman');
 const reportsDir = path.join(postmanDir, 'reports');
@@ -62,6 +67,22 @@ function waitForHealth(timeoutMs = 20000) {
   });
 }
 
+function writeLcov() {
+  const reportDir = path.join(backendDir, 'coverage');
+  const c8Bin = path.join(backendDir, 'node_modules', 'c8', 'bin', 'c8.js');
+  const result = spawnSync(
+    process.execPath,
+    [c8Bin, 'report', `--temp-directory=${coverageTmpDir}`, '--reporter=lcovonly', `--report-dir=${reportDir}`, '--include=src/**', '--exclude=**/*.test.js', '--exclude=**/__tests__/**'],
+    { cwd: backendDir, encoding: 'utf-8' }
+  );
+  if (result.status !== 0) throw new Error(`Coverage report failed:\n${result.stdout}${result.stderr}`);
+  // SonarCloud scans from the repository root, so make the file paths root-relative.
+  const lcovPath = path.join(reportDir, 'lcov.info');
+  const fixed = fs.readFileSync(lcovPath, 'utf-8').replace(/^SF:/gm, 'SF:backend/');
+  fs.writeFileSync(lcovPath, fixed);
+  console.log(`> Coverage written to ${path.relative(process.cwd(), lcovPath) || lcovPath}`);
+}
+
 async function main() {
   ['certs/key.pem', 'certs/cert.pem'].forEach((f) => {
     if (!fs.existsSync(path.join(backendDir, f))) throw new Error(`Missing ${f}. Run "npm run gen-cert" first.`);
@@ -81,6 +102,7 @@ async function main() {
     RATE_LIMIT_API_MAX: '2000',
     RATE_LIMIT_CONTACT_MAX: '30', // real default is 5; the contact folder sends a dozen requests, and the last folder trips it on purpose
     RATE_LIMIT_OTP_MAX: '100', // real default is 8; email verification, 2FA and password reset together make dozens of legitimate calls in one run
+    ...(withCoverage ? { NODE_V8_COVERAGE: coverageTmpDir } : {}),
     ADMIN_EMAIL: admin.email,
     ADMIN_PASSWORD: admin.password,
   };
@@ -123,6 +145,15 @@ async function main() {
   });
 
   stop();
+  if (withCoverage) {
+    // The server writes its coverage data as it exits, so wait for that before reading it.
+    await new Promise((resolve) => {
+      if (server.exitCode !== null) return resolve();
+      server.once('exit', resolve);
+      setTimeout(resolve, 10000);
+    });
+    writeLcov();
+  }
 
   const { assertions, requests } = summary.run.stats;
   console.log(`\nRequests: ${requests.total} | Assertions: ${assertions.total} | Failed assertions: ${assertions.failed}`);

@@ -8,6 +8,7 @@
     "gen-cert": "node scripts/generateCert.js",
     "seed:admin": "node scripts/seedAdmin.js",
     "test:api": "node scripts/runNewman.js",
+    "test:api:coverage": "node scripts/runNewman.js --coverage",
     "test:unit": "jest",
     "build": "node -e \"require('./src/app.js'); console.log('Backend loads cleanly: all routes, controllers and middleware wired without error.')\"",
     "lint": "eslint .",
@@ -34,6 +35,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
+    "c8": "^12.0.0",
     "eslint": "^9.39.5",
     "eslint-plugin-security": "^4.2.0",
     "globals": "^17.13.0",
