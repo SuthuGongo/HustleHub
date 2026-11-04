@@ -26,10 +26,18 @@ function testDatabaseUri() {
   if (process.env.MONGODB_URI_TEST) return process.env.MONGODB_URI_TEST;
   const uri = process.env.MONGODB_URI;
   if (!uri) throw new Error('MONGODB_URI is not set. Copy .env.example to .env first.');
-  const match = /^(mongodb(?:\+srv)?:\/\/[^/?]+)(.*)$/.exec(uri);
-  if (!match) return uri;
-  const query = match[2].includes('?') ? match[2].slice(match[2].indexOf('?')) : '';
-  return `${match[1]}/hustlehub_test${query}`; // same server, separate database
+  // Plain string handling rather than a regular expression: keep "mongodb://host", swap the database name.
+  const schemeEnd = uri.indexOf('://');
+  const scheme = schemeEnd < 0 ? '' : uri.slice(0, schemeEnd);
+  if (scheme !== 'mongodb' && scheme !== 'mongodb+srv') return uri;
+  const hostStart = schemeEnd + 3;
+  const slash = uri.indexOf('/', hostStart);
+  const queryStart = uri.indexOf('?', hostStart);
+  const ends = [slash, queryStart].filter((i) => i !== -1);
+  const hostEnd = ends.length ? Math.min(...ends) : uri.length;
+  if (hostEnd === hostStart) return uri;
+  const query = queryStart === -1 ? '' : uri.slice(queryStart);
+  return `${uri.slice(0, hostEnd)}/hustlehub_test${query}`; // same server, separate database
 }
 
 function readAdminCredentials() {
