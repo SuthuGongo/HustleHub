@@ -16,8 +16,8 @@ jobs:
       - run:
           name: Install Dependencies
           command: |
-            cd backend && npm ci
-            cd ../frontend && npm ci
+            cd backend && npm ci --ignore-scripts
+            cd ../frontend && npm ci --ignore-scripts
       - persist_to_workspace:
           root: ~/build
           paths:
