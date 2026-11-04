@@ -67,7 +67,7 @@ Anyone can register as a client or freelancer. **Admin accounts cannot be create
 - A plain, professional interface: a flat warm background, white cards with hairline borders, one deep-green accent colour, and no gradients, glows or floating decoration. Details that remain: the login/register card closes in on its cut corners and reopens as the other form, gig cards use a flat muted colour and icon per category, an income total that counts up, a perforated receipt ticket, and a payment card that fills in live as you type. All motion respects `prefers-reduced-motion`
 - **Escrow-style payments.** A booking's money isn't simply "paid" the instant it's created - it's held by the platform (`escrowStatus: 'held'`), and only reaches the freelancer once the client confirms the work or a configurable review window quietly expires. See [section 12](#12-escrow-holding-funds-until-confirmed-or-reviewed) for the full lifecycle
 - Security controls throughout: validation, sanitisation, rate limiting, Helmet + Content Security Policy, HTTPS, safe error handling
-- Automated tests: a 427-request Postman/Newman API suite (1,883 assertions), 41 backend unit tests (Jest) and 358 frontend tests across 29 files (Vitest + React Testing Library)
+- Automated tests: a 431-request Postman/Newman API suite (1,903 assertions), 41 backend unit tests (Jest) and 375 frontend tests across 30 files (Vitest + React Testing Library)
 
 ## 3. Architecture
 
