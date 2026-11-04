@@ -14,11 +14,11 @@ function clean(value) {
     return value;
   }
   if (value && typeof value === 'object') {
-    for (const key of Object.keys(value)) {
+    for (const [key, child] of Object.entries(value)) {
       if (isForbiddenKey(key)) {
-        delete value[key];
+        Reflect.deleteProperty(value, key);
       } else {
-        clean(value[key]);
+        clean(child);
       }
     }
   }
