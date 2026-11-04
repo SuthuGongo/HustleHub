@@ -51,7 +51,7 @@ export function StarInput({ value, onChange, label = 'Your rating' }) {
   const shown = hover || value;
   return (
     <div className="star-input">
-      <div role="radiogroup" aria-label={label} className="star-input-row" onMouseLeave={() => setHover(0)}>
+      <div role="radiogroup" tabIndex={-1} aria-label={label} className="star-input-row" onMouseLeave={() => setHover(0)}>
         {[1, 2, 3, 4, 5].map((n) => (
           <button
             key={n}
