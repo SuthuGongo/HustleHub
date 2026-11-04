@@ -15,7 +15,7 @@ const GENERIC_FAILURE_MESSAGE = 'That code is not valid or has expired.';
 async function forgotPassword(req, res, next) {
   try {
     const email = req.body.email;
-    const user = await User.findOne({ email: { $eq: email } });
+    const user = await User.findOne({ email: { $eq: String(email) } });
 
     if (user && user.isActive) {
       await issueCode(user, 'reset_password');
@@ -37,7 +37,7 @@ async function forgotPassword(req, res, next) {
 // same request/response, which is exactly what forgotPassword() must never do (see above).
 async function resetPassword(req, res, next) {
   try {
-    const user = await User.findOne({ email: { $eq: req.body.email } });
+    const user = await User.findOne({ email: { $eq: String(req.body.email) } });
     if (!user || !user.isActive) {
       // Same message as a wrong code: whether the email doesn't exist or the code is wrong is not
       // something the caller gets to distinguish.

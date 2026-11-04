@@ -39,15 +39,15 @@ async function listGigs(req, res, next) {
     const { q, category, minPrice, maxPrice, sort = 'newest', page = 1, limit = 12 } = req.query;
 
     const filter = { isActive: true };
-    if (category) filter.category = { $eq: category };
+    if (category) filter.category = { $eq: String(category) };
     if (minPrice !== undefined || maxPrice !== undefined) {
       const range = {};
-      if (minPrice !== undefined) range.$gte = minPrice;
-      if (maxPrice !== undefined) range.$lte = maxPrice;
+      if (minPrice !== undefined) range.$gte = Number(minPrice);
+      if (maxPrice !== undefined) range.$lte = Number(maxPrice);
       filter.price = mongoose.trusted(range); // operators we built ourselves from validated numbers
     }
     if (q) {
-      const rx = containsRegex(q);
+      const rx = containsRegex(String(q));
       filter.$or = [{ title: rx }, { description: rx }];
     }
 

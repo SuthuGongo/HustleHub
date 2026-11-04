@@ -15,7 +15,7 @@ async function register(req, res, next) {
       return next(new AppError('Role must be one of: freelancer, client.', 422));
     }
 
-    const existingUser = await User.findOne({ email: { $eq: email } });
+    const existingUser = await User.findOne({ email: { $eq: String(email) } });
     if (existingUser) {
       return next(new AppError('An account with this email already exists.', 409));
     }
@@ -44,7 +44,7 @@ async function login(req, res, next) {
   try {
     const { email, password } = req.body;
 
-    const user = await User.findOne({ email: { $eq: email } }).select('+passwordHash');
+    const user = await User.findOne({ email: { $eq: String(email) } }).select('+passwordHash');
 
     const genericAuthError = () => new AppError('Invalid email or password.', 401);
 

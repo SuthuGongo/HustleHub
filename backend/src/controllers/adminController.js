@@ -20,9 +20,9 @@ const withPeople = (query) => query.populate('client', 'name').populate('freelan
 // so "aisha" finds "Aisha Naidoo" and "@gmail" finds every Gmail address, without needing an exact match.
 async function listUsers(req, res, next) {
   try {
-    const filter = req.query.role ? { role: { $eq: req.query.role } } : {};
+    const filter = req.query.role ? { role: { $eq: String(req.query.role) } } : {};
     if (req.query.search) {
-      const rx = containsRegex(req.query.search);
+      const rx = containsRegex(String(req.query.search));
       filter.$or = [{ name: rx }, { email: rx }];
     }
     const users = await User.find(filter).sort({ createdAt: -1 }).limit(500);
@@ -62,7 +62,7 @@ async function listAllGigs(req, res, next) {
   try {
     const filter = {};
     if (req.query.search) {
-      const rx = containsRegex(req.query.search);
+      const rx = containsRegex(String(req.query.search));
       const matchingFreelancers = await User.find({ name: rx }).select('_id');
       filter.$or = [{ title: rx }, { freelancer: { $in: matchingFreelancers.map((u) => u._id) } }];
     }
@@ -92,7 +92,7 @@ async function listAllTransactions(req, res, next) {
   try {
     const filter = {};
     if (req.query.search) {
-      const rx = containsRegex(req.query.search);
+      const rx = containsRegex(String(req.query.search));
       const matchingUsers = await User.find({ name: rx }).select('_id');
       const userIds = matchingUsers.map((u) => u._id);
       filter.$or = [{ reference: rx }, { gigTitle: rx }, { client: { $in: userIds } }, { freelancer: { $in: userIds } }];
@@ -283,9 +283,9 @@ async function getStats(req, res, next) {
 // so the filter chips stay meaningful even while searching.
 async function listMessages(req, res, next) {
   try {
-    const filter = req.query.status ? { status: { $eq: req.query.status } } : {};
+    const filter = req.query.status ? { status: { $eq: String(req.query.status) } } : {};
     if (req.query.search) {
-      const rx = containsRegex(req.query.search);
+      const rx = containsRegex(String(req.query.search));
       filter.$or = [{ name: rx }, { email: rx }, { message: rx }, { reference: rx }];
     }
     const [messages, ...counts] = await Promise.all([

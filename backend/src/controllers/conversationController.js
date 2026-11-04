@@ -17,7 +17,7 @@ async function startConversation(req, res, next) {
     const { gigId } = req.body;
     if (!mongoose.isValidObjectId(gigId)) return next(new AppError('Gig not found.', 404));
 
-    const gig = await Gig.findOne({ _id: { $eq: gigId } }).populate('freelancer', 'name');
+    const gig = await Gig.findOne({ _id: { $eq: String(gigId) } }).populate('freelancer', 'name');
     if (!gig || !gig.isActive) return next(new AppError('Gig not found.', 404));
     if (String(gig.freelancer.id) === req.user.id) {
       return next(new AppError('You cannot message yourself about your own gig.', 400));
@@ -40,7 +40,7 @@ async function startConversation(req, res, next) {
     // than the findOne-first check above; treat that the same as finding it, not as an error.
     if (err.code === 11000) {
       try {
-        const gig = await Gig.findOne({ _id: { $eq: req.body.gigId } }).select('freelancer');
+        const gig = await Gig.findOne({ _id: { $eq: String(req.body.gigId) } }).select('freelancer');
         const existing = gig && (await Conversation.findOne({ client: req.user.id, freelancer: gig.freelancer, gig: gig.id }));
         if (existing) return res.status(200).json({ success: true, data: { conversation: existing } });
       } catch {
