@@ -7,7 +7,17 @@ const User = require('../src/models/User');
 const { connectDb, disconnectDb } = require('../src/config/db');
 const { hashPassword } = require('../src/utils/password');
 
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// A plain check instead of a backtracking-prone regular expression.
+const EMAIL_PATTERN = {
+  test(value) {
+    const email = String(value);
+    const at = email.indexOf('@');
+    if (at < 1 || at !== email.lastIndexOf('@') || /\s/.test(email)) return false;
+    const domain = email.slice(at + 1);
+    const dot = domain.lastIndexOf('.');
+    return dot > 0 && dot < domain.length - 1;
+  },
+};
 
 async function main() {
   const name = process.env.ADMIN_NAME || 'Platform Admin';

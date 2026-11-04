@@ -26,8 +26,10 @@ function testDatabaseUri() {
   if (process.env.MONGODB_URI_TEST) return process.env.MONGODB_URI_TEST;
   const uri = process.env.MONGODB_URI;
   if (!uri) throw new Error('MONGODB_URI is not set. Copy .env.example to .env first.');
-  const match = uri.match(/^(mongodb(?:\+srv)?:\/\/[^/?]+)\/?([^?]*)(\?.*)?$/);
-  return match ? `${match[1]}/hustlehub_test${match[3] || ''}` : uri; // same server, separate database
+  const match = /^(mongodb(?:\+srv)?:\/\/[^/?]+)(.*)$/.exec(uri);
+  if (!match) return uri;
+  const query = match[2].includes('?') ? match[2].slice(match[2].indexOf('?')) : '';
+  return `${match[1]}/hustlehub_test${query}`; // same server, separate database
 }
 
 function readAdminCredentials() {

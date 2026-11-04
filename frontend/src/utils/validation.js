@@ -2,7 +2,18 @@
 // The server still validates everything again - this is a convenience, not a security control.
 import { CATEGORIES, CONTACT_TOPICS } from './constants';
 
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+// A plain check instead of one big regular expression: a pattern like [^\s@]+@[^\s@]+\.[^\s@]+ can take
+// quadratic time on a long crafted string, so the address is split and checked piece by piece instead.
+const EMAIL_PATTERN = {
+  test(value) {
+    const email = String(value);
+    const at = email.indexOf('@');
+    if (at < 1 || at !== email.lastIndexOf('@') || /\s/.test(email)) return false;
+    const domain = email.slice(at + 1);
+    const dot = domain.lastIndexOf('.');
+    return dot > 0 && domain.length - dot - 1 >= 2;
+  },
+};
 
 export function validateLogin({ email, password }) {
   const errors = {};
