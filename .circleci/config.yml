@@ -34,6 +34,8 @@ jobs:
           at: ~/build
       - run:
           name: Analyze Code Quality & Security
+          # sonar.scm.disabled skips the per-line author lookup, which needs the full git history that
+          # CircleCI's checkout does not carry (it failed with "Missing blob"). Issues are still reported.
           # SONAR_TOKEN is read from the environment by the scanner, so it is not passed with
           # -Dsonar.login (deprecated in newer scanner versions).
           command: |
@@ -44,6 +46,7 @@ jobs:
               -Dsonar.host.url=https://sonarcloud.io \
               -Dsonar.branch.name="$SONAR_BRANCH" \
               -Dsonar.sources=backend/src,backend/scripts,frontend/src \
+              -Dsonar.scm.disabled=true \
               -Dsonar.exclusions="**/node_modules/**,**/dist/**,**/public/**,**/*.test.js,**/*.test.jsx,frontend/src/test/**,postman/**"
 
 workflows:
