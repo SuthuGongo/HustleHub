@@ -83,5 +83,12 @@ export default defineConfig({
     globals: true,
     setupFiles: './src/test/setup.js',
     css: false,
+    // Used by `npm run test:coverage`; the lcov file is what SonarCloud reads.
+    coverage: {
+      provider: 'v8',
+      reporter: ['lcovonly', 'text-summary'],
+      include: ['src/**'],
+      exclude: ['src/test/**', 'src/main.jsx'],
+    },
   },
 });
