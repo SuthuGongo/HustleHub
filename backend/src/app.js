@@ -3,7 +3,7 @@ const helmet = require('helmet');
 const cors = require('cors');
 const morgan = require('morgan');
 
-const { corsOrigin, nodeEnv, useHttps } = require('./config/env');
+const { corsOrigin, nodeEnv, useHttps, trustProxy } = require('./config/env');
 const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
 const gigRoutes = require('./routes/gigRoutes');
@@ -17,6 +17,7 @@ const { apiLimiter } = require('./middleware/rateLimiter');
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 
 const app = express();
+app.set('trust proxy', trustProxy);
 
 // ---- Security headers (Helmet) ----
 // This service only ever returns JSON, so its Content-Security-Policy can be as strict as possible:

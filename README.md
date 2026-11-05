@@ -28,7 +28,9 @@ A secure freelance marketplace built with the **MERN** stack (MongoDB, Express, 
 12. [Escrow: holding funds until confirmed or reviewed](#12-escrow-holding-funds-until-confirmed-or-reviewed)
 13. [Design decisions, trade-offs and known limitations](#13-design-decisions-trade-offs-and-known-limitations)
 14. [Income dashboard and tax estimate](#14-income-dashboard-and-tax-estimate)
-15. [Static code analysis](#15-static-code-analysis)
+15. [CI/CD pipeline](#15-cicd-pipeline)
+16. [Static code analysis](#16-static-code-analysis)
+17. [Docker](#17-docker)
 
 ---
 
@@ -286,7 +288,8 @@ hustlehub-plus/
 │   │   ├── generateCert.js      Creates the local self-signed TLS certificate
 │   │   ├── seedAdmin.js         Creates the first admin account
 │   │   └── runNewman.js         One-command API test runner
-│   └── certs/                   key.pem / cert.pem (git-ignored)
+│   ├── certs/                   key.pem / cert.pem (git-ignored)
+│   └── Dockerfile               API image (section 17)
 ├── frontend/                    React (Vite) single-page app
 │   ├── src/
 │   │   ├── api/                 fetch client + one function per endpoint
@@ -305,7 +308,11 @@ hustlehub-plus/
 │   │   │                        token store, text decoding
 │   │   ├── styles/              index.css (design tokens + components)
 │   │   └── test/                Vitest + React Testing Library tests
-│   └── vite.config.js           HTTPS dev/preview server, /api proxy, security headers
+│   ├── vite.config.js           HTTPS dev/preview server, /api proxy, security headers
+│   ├── Dockerfile               Web image: Vite build served by nginx (section 17)
+│   └── nginx.conf               Serves the app, proxies /api to the backend container
+├── docker-compose.yml           MongoDB + API + web server in one command (section 17)
+├── scripts/docker-smoke-test.sh End-to-end check of the running containers
 └── postman/
     ├── HustleHub.postman_collection.json         API test suite (used by Newman)
     ├── HustleHub-Local.postman_environment.json
@@ -598,7 +605,7 @@ cd frontend
 npm test
 ```
 
-346 tests across 29 files (confirmed with a clean `npm install` + `npx vitest run` in this round) covering component rendering and user interaction:
+375 tests across 30 files (`npx vitest run`) covering component rendering and user interaction:
 
 - **Simulated payments (`GigDetailPage`, `BookingsPage`, `PaymentFields`, `CardPreview`, `utils/card`)** – booking a gig walks through review → demo card entry → confirmation inside one dialog; the card form's Luhn/expiry/CVC validation (unit-tested directly in `utils/card.test.js`) gates the Pay button; the server's error is shown and the dialog stays open if the booking request fails; a "Verifying your payment…" pause auto-redirects to the conversation with the freelancer, and a one-time dismissible banner confirms it on the Messages page
 - **Escrow (`BookingsPage`, `AdminEscrow`)** – a client sees "Release funds now" / "Report a problem" only while a booking is `awaiting_review`, and a live countdown to the auto-release deadline; releasing shows "Paid out", disputing requires a reason and shows "Awaiting resolution"; a freelancer sees a read-only "Pending payments" summary of what's currently held, never the release/dispute controls (client-only); the admin "Active bookings" tab lists everything currently held with a running total, and "Disputes" lets an admin resolve one (release or refund) with the list correctly emptying afterwards
@@ -766,13 +773,48 @@ Because the rebate cancels the first bracket's tax up to R99,000 (17,820 / 18%),
 
 **Tested by:** 15+ unit tests for the tax maths (bracket boundaries, rebate floor, tax-year rollover, monthly totals), a unit test that a refund removes the money from the totals, Postman assertions on the income endpoint and a refund scenario (income R1000, refund, income R500), and frontend tests for each part of the page.
 
-## 15. Static code analysis
+## 15. CI/CD pipeline
+
+Two services run automatically on every push to the repository. GitHub Actions runs the build, tests and security checks. CircleCI runs the tests again with coverage and sends the results to SonarCloud. If any step fails, the run is marked red and the push shows a failing check on GitHub.
+
+**GitHub Actions: `.github/workflows/ci.yml`** (runs on every push, on pull requests to `main`, and on demand)
+
+| Job | What it does | Fails the run when |
+|---|---|---|
+| Static analysis - ESLint | Installs both apps and lints the backend and the frontend with the security rules | Any lint error is found |
+| Security - dependency vulnerability audit | `npm audit --audit-level=high` on the packages that ship to production | A high or critical vulnerability is found |
+| Backend - install, unit tests, API tests, build | Installs dependencies, starts a MongoDB 7 container, runs the Jest unit tests, generates a local certificate, runs the full Postman collection through Newman against the real server, then does a load-time build check | A unit test, an API assertion or the build fails |
+| Frontend - install, tests, build | Installs dependencies, runs the Vitest suite, builds the production bundle | A test or the build fails |
+| Docker - build images, run containers, smoke test | Builds both images, starts MongoDB, the API and the web server with `docker compose`, waits until every container reports healthy, then runs `scripts/docker-smoke-test.sh` against them (section 17) | An image does not build, a container is unhealthy, or a smoke check fails |
+
+The backend and frontend jobs install dependencies, run the tests and build, as the brief requires. The Newman report and the frontend build are uploaded as downloadable artifacts of each run. All installs use `npm ci --ignore-scripts`, so the exact versions in the lock files are used and no package can run code during installation.
+
+**GitHub Actions: `.github/workflows/codeql.yml`.** A separate workflow that runs CodeQL (see section 16).
+
+**CircleCI: `.circleci/config.yml`.** One workflow with two jobs:
+
+1. `test_and_coverage` starts the Node image with a MongoDB 7 container, runs the backend API tests with coverage (`npm run test:api:coverage`) and the frontend tests with coverage (`npm run test:coverage`), and keeps both coverage reports.
+2. `sonarqube` takes those reports, runs the SonarCloud scanner and fails if the quality gate does not pass.
+
+The CircleCI project holds three environment variables (`SONAR_TOKEN`, `SONAR_ORG`, `SONAR_PROJECT_KEY`). No token is stored in the repository.
+
+**Tests run in the pipeline**
+
+| Suite | Tool | Size |
+|---|---|---|
+| Backend unit tests | Jest | 41 tests |
+| API tests | Postman collection run by Newman against the real server and database | 431 requests, 1,903 assertions |
+| Frontend tests | Vitest and React Testing Library | 375 tests in 30 files |
+
+**Evidence.** The Actions tab of the GitHub repository lists every run, with each job and step. The CircleCI project page lists the CircleCI pipelines, including an early failed run that was fixed.
+
+## 16. Static code analysis
 
 Three tools scan the code on every push, and a failing result fails the pipeline.
 
 | Tool | What it checks | Where it runs | Where to see the result |
 |---|---|---|---|
-| SonarCloud | Bugs, security vulnerabilities, security hotspots and code smells, with a pass or fail quality gate | Runs on every push to `main` | The SonarCloud project dashboard for `SuthuGongo_HustleHub` |
+| SonarCloud | Bugs, security vulnerabilities, security hotspots and code smells, with a pass or fail quality gate | The `sonarqube` job in the CircleCI pipeline, on every push to `main` | The SonarCloud project dashboard for `SuthuGongo_HustleHub` |
 | ESLint with `eslint-plugin-security` (backend and frontend) | Unsafe patterns such as unsanitised regular expressions, dynamic object access, and React hook mistakes | The `Static analysis` job in `.github/workflows/ci.yml` | The job log in the Actions tab |
 | CodeQL (`security-and-quality` queries) | Data-flow security problems such as injection, unsafe logging and disabled certificate checks | `.github/workflows/codeql.yml` | Security and quality, Code scanning |
 
@@ -802,4 +844,37 @@ The dependency audit job (`npm audit --audit-level=high`) fails the pipeline if 
 | Radio group not focusable | `StarRating.jsx` | The group is now focusable, while each star button keeps its own keyboard handling |
 
 
-**Coverage and the quality gate.** SonarCloud's default quality gate (Sonar way) requires at least 80% test coverage on new code. The CircleCI pipeline therefore runs the test suites with coverage switched on before the scan: the backend API tests (`npm run test:api:coverage`, which runs the real server under the Newman collection against a MongoDB container and records coverage) and the frontend tests (`npm run test:coverage`). Both reports are passed to the scanner. Measured coverage is about 92% of backend lines and 87% of frontend lines. Scripts, configuration files and the frontend entry file are excluded from coverage because they are not application logic.
+**Coverage and the quality gate.** SonarCloud's default quality gate (Sonar way) requires at least 80% test coverage on new code. The CircleCI pipeline therefore runs the test suites with coverage switched on before the scan: the backend API tests (`npm run test:api:coverage`, which runs the real server under the Newman collection against a MongoDB container and records coverage) and the frontend tests (`npm run test:coverage`). Both reports are passed to the scanner. Measured coverage is about 92% of backend lines and 88% of frontend lines. Scripts, configuration files and the frontend entry file are excluded from coverage because they are not application logic.
+
+**Current result.** The quality gate (Sonar way) passes: 0 open issues, 0 security hotspots, 0.0% duplication on new code, 93% coverage on new code (80% required) and 88.8% overall. Security, reliability and maintainability are all rated A. Writing the tests that lifted coverage over the gate also exposed a real fault: the admin search on the Gigs and Transactions pages returned an error whenever text was typed, because the `$in` lookups were rejected by the `sanitizeFilter` setting. They are now marked as trusted, since the ids come from our own lookup and not from the request, and the API collection has requests that search each admin list.
+
+## 17. Docker
+
+The whole application runs in containers: one for the database, one for the API and one for the web server. Each of the apps has its own `Dockerfile` in its folder, and `docker-compose.yml` in the project root starts all three together.
+
+| Container | Built from | What it does |
+|---|---|---|
+| `mongo` | The official `mongo:7` image | The database. Has a root user with a password, stores its data in a named volume, and is not reachable from outside Docker |
+| `backend` | `backend/Dockerfile` | The Express API on port 5000 inside the network, over plain HTTP because the web container handles the outside connection |
+| `frontend` | `frontend/Dockerfile` | nginx serving the built React app on port 8080 inside the container (published as port 3000), and forwarding `/api` (including the chat WebSocket) to the API |
+
+**Run it**
+
+1. Copy `.env.docker.example` to `.env` in the project root and put a random value for `JWT_SECRET` and for `MONGO_PASSWORD` (the file shows how to generate them). `.env` is git-ignored, so the secrets are never committed.
+2. `docker compose up --build`
+3. Open http://localhost:3000. Stop with `Ctrl+C`, and `docker compose down` removes the containers (add `-v` to delete the database volume too).
+
+The verification and reset codes are printed in the API's log when no mail server is set: `docker compose logs backend`. To create the first admin inside the stack: `docker compose exec -e ADMIN_NAME="Platform Admin" -e ADMIN_EMAIL=admin@example.com -e ADMIN_PASSWORD="a strong password" backend node scripts/seedAdmin.js`.
+
+**How the images are built**
+
+- Both use multi-stage builds. The API image installs production dependencies only, so no test or lint tools ship in it. The web image builds the app in a Node stage, then copies only the built files into nginx, so no Node, source code or `node_modules` are in the final image.
+- Dependencies are installed with `npm ci --ignore-scripts`, which uses the exact versions in the lock file and lets no package run code during the build.
+- Both run as an unprivileged user (`node` and `nginx`), with all Linux capabilities dropped and `no-new-privileges` set in the compose file.
+- `.dockerignore` files keep `node_modules`, certificates, `.env` files and test files out of the images.
+- Each container has a health check. The API waits for a healthy database, and the web container waits for a healthy API, so the stack comes up in the right order.
+- Only port 3000 is published. The database and API are on the compose network and can only be reached through the web container.
+
+**Settings that matter in a container.** `USE_HTTPS=false` because TLS ends at the edge (the local certificate is only for development). `TRUST_PROXY=1` tells the API there is one proxy in front of it, so rate limiting and logs see the real client address and not the proxy's. nginx sends the same security headers as the Vite preview server, including a strict Content-Security-Policy.
+
+**In the pipeline.** The `Docker` job in `.github/workflows/ci.yml` creates a throwaway `.env`, builds both images, starts the stack with `docker compose up --wait`, and fails if any container does not become healthy. It then runs `scripts/docker-smoke-test.sh` against the running containers: the app is served, the security headers are present, the API answers through the proxy, a user can register and verify an email (which proves the database is connected), the token works on the protected income and tax endpoint, and a request without a token gets 401. The job summary lists the running containers and the image sizes. You can run the same script yourself after `docker compose up`.
