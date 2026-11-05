@@ -35,6 +35,13 @@ jobs:
             JWT_SECRET: circleci-only-test-secret-not-used-anywhere-real-0123456789
             MONGODB_URI: mongodb://127.0.0.1:27017/hustlehub
       - run:
+          name: Backend unit tests with coverage
+          command: |
+            cd backend
+            npm run test:unit:coverage
+            # Same as for the frontend: make the paths relative to the repository root.
+            sed -i 's#^SF:#SF:backend/#' coverage-jest/lcov.info
+      - run:
           name: Frontend tests with coverage
           command: |
             cd frontend
@@ -45,6 +52,7 @@ jobs:
           root: ~/build
           paths:
             - backend/coverage/lcov.info
+            - backend/coverage-jest/lcov.info
             - frontend/coverage/lcov.info
 
   sonarqube:
@@ -71,7 +79,7 @@ jobs:
               -Dsonar.branch.name="$SONAR_BRANCH" \
               -Dsonar.sources=backend/src,backend/scripts,frontend/src \
               -Dsonar.scm.disabled=true \
-              -Dsonar.javascript.lcov.reportPaths=backend/coverage/lcov.info,frontend/coverage/lcov.info \
+              -Dsonar.javascript.lcov.reportPaths=backend/coverage/lcov.info,backend/coverage-jest/lcov.info,frontend/coverage/lcov.info \
               -Dsonar.coverage.exclusions="backend/scripts/**,**/*.config.js,frontend/src/main.jsx" \
               -Dsonar.exclusions="**/node_modules/**,**/dist/**,**/public/**,**/*.test.js,**/*.test.jsx,frontend/src/test/**,frontend/src/assets/**,postman/**"
 
