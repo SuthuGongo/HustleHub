@@ -95,6 +95,7 @@ flowchart LR
     end
 
     subgraph API["Backend API  · https://localhost:5443 (TLS)"]
+
         MW["Express middleware pipeline<br/>Helmet/CSP → CORS → body limit → NoSQL sanitiser<br/>→ rate limiter → JWT auth → RBAC → validation"]
         CTRL["Controllers<br/>auth · gigs · bookings · transactions · admin"]
     end
@@ -105,6 +106,7 @@ flowchart LR
     SPA -- "HTTPS  /api/*" --> Proxy
     Proxy -- "HTTPS" --> MW
     MW --> CTRL
+
     CTRL -- "Mongoose (sanitizeFilter on)" --> DB
 ```
 
@@ -126,6 +128,7 @@ flowchart LR
 <summary>Mermaid source</summary>
 
 ```mermaid
+
 flowchart TD
     A[Incoming request] --> B[Helmet: security headers + API CSP]
     B --> C[CORS allow-list]
@@ -157,13 +160,15 @@ flowchart TD
 
 ```mermaid
 erDiagram
+
     USER ||--o{ GIG : "freelancer offers"
     USER ||--o{ BOOKING : "client makes"
     GIG  ||--o{ BOOKING : "is booked as"
     BOOKING ||--|| TRANSACTION : "produces exactly one"
     BOOKING ||--o| REVIEW : "may receive one, once completed"
     GIG  ||--o{ REVIEW : "is rated by"
-    USER {
+    USER
+{
         string name
         string email UK
         string passwordHash "bcrypt, never returned"
