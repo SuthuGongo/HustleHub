@@ -1,6 +1,7 @@
 const { verifyToken } = require('../utils/token');
 const AppError = require('../utils/AppError');
 const User = require('../models/User');
+const logger = require('../utils/logger');
 
 // Verifies the Bearer token and loads the account. Throws AppError(401) for anything wrong with the credentials.
 async function resolveUser(req) {
@@ -15,6 +16,7 @@ async function resolveUser(req) {
   try {
     decoded = verifyToken(token);
   } catch {
+    logger.warn('auth.token.rejected', { reason: 'invalid_or_expired', ip: req.ip, path: req.originalUrl.split('?')[0], requestId: req.id });
     throw new AppError('Invalid or expired token.', 401);
   }
 
@@ -23,6 +25,7 @@ async function resolveUser(req) {
   // without this check it would still authenticate successfully below, since role is looked up from
   // the database by id alone. Only tokens with no "stage" claim at all are treated as real sessions.
   if (decoded.stage) {
+    logger.warn('auth.token.rejected', { reason: 'pending_token_used_as_session', userId: decoded.id, ip: req.ip, requestId: req.id });
     throw new AppError('Invalid or expired token.', 401);
   }
 
@@ -30,6 +33,7 @@ async function resolveUser(req) {
   // disabled account loses access immediately instead of when the token expires.
   const user = await User.findById(decoded.id).select('role isActive');
   if (!user || !user.isActive) {
+    logger.warn('auth.token.rejected', { reason: 'account_missing_or_disabled', userId: decoded.id, ip: req.ip, requestId: req.id });
     throw new AppError('Authentication required.', 401);
   }
   return { id: user.id, role: user.role };

@@ -40,6 +40,13 @@ module.exports = {
   // How many reverse proxies (nginx in Docker, Render's load balancer) sit in front of the API. 0 = none.
   // Needed so rate limiting and logs see the real client address instead of the proxy's.
   trustProxy: positiveInt(process.env.TRUST_PROXY, 0),
+  log: {
+    // debug, info, warn, error or silent. See utils/logger.js.
+    level: process.env.LOG_LEVEL || 'info',
+    // Optional: when both are set, log events are also sent to Better Stack (see README, logging section).
+    betterStackToken: process.env.BETTERSTACK_SOURCE_TOKEN || '',
+    betterStackHost: process.env.BETTERSTACK_INGEST_HOST || '',
+  },
   isProduction: (process.env.NODE_ENV || 'development') === 'production',
   mongodbUri: process.env.MONGODB_URI,
   twoFactorTokenExpiresIn: process.env.TWO_FACTOR_TOKEN_EXPIRES_IN || '10m', // how long a "verify your code" session stays open

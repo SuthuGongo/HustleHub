@@ -10,6 +10,7 @@
     "test:api": "node scripts/runNewman.js",
     "test:api:coverage": "node scripts/runNewman.js --coverage",
     "test:unit": "jest",
+    "test:unit:coverage": "jest --coverage --coverageReporters=lcovonly --coverageReporters=text-summary --coverageDirectory=coverage-jest",
     "build": "node -e \"require('./src/app.js'); console.log('Backend loads cleanly: all routes, controllers and middleware wired without error.')\"",
     "lint": "eslint .",
     "sync:refunds": "node scripts/syncRefundedTransactions.js"

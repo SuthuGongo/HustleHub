@@ -6,6 +6,7 @@ const Booking = require('../models/Booking');
 const Transaction = require('../models/Transaction');
 const ContactMessage = require('../models/ContactMessage');
 const AppError = require('../utils/AppError');
+const logger = require('../utils/logger');
 const { sendMail } = require('../utils/mailer');
 const { replyEmailHtml } = require('../utils/emailTemplates');
 const { emitToUser } = require('../services/socketService');
@@ -45,6 +46,7 @@ async function setUserStatus(req, res, next) {
     }
     user.isActive = req.body.isActive;
     await user.save();
+    logger.warn('admin.user.status_changed', { adminId: req.user.id, userId: user.id, isActive: user.isActive, requestId: req.id });
     res.status(200).json({
       success: true,
       message: user.isActive ? 'User enabled.' : 'User disabled.',
@@ -81,7 +83,7 @@ async function deleteAnyGig(req, res, next) {
     const gig = await Gig.findById(req.params.id);
     if (!gig) return next(new AppError('Gig not found.', 404));
     await gig.deleteOne();
-    console.warn(`[AUDIT] Admin ${req.user.id} removed gig ${gig.id} owned by ${gig.freelancer}`);
+    logger.warn('admin.gig.removed', { adminId: req.user.id, gigId: gig.id, ownerId: gig.freelancer, requestId: req.id });
     res.status(200).json({ success: true, message: 'Gig removed by administrator.' });
   } catch (err) {
     next(err);
@@ -161,6 +163,7 @@ async function resolveDispute(req, res, next) {
     if (resolution === 'refunded') {
       await Transaction.updateOne({ booking: booking._id }, { $set: { status: 'refunded', refundedAt: booking.resolvedAt } });
     }
+    logger.info(resolution === 'refunded' ? 'transaction.refunded' : 'booking.dispute_released', { bookingId: booking.id, adminId: req.user.id, clientId: booking.client, freelancerId: booking.freelancer, amount: booking.price, requestId: req.id });
     const populated = await withPeople(Booking.findById(booking.id));
     res.status(200).json({
       success: true,

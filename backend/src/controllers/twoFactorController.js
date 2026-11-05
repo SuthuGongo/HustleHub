@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const User = require('../models/User');
 const TwoFactorCode = require('../models/TwoFactorCode');
 const AppError = require('../utils/AppError');
+const logger = require('../utils/logger');
 const { comparePassword } = require('../utils/password');
 const { signToken, verifyPendingToken } = require('../utils/token');
 const { RESEND_COOLDOWN_MS, generateBackupCodes, hashBackupCode } = require('../utils/twoFactor');
@@ -95,7 +96,10 @@ async function verifyLogin(req, res, next) {
         const b = Buffer.from(hash);
         return a.length === b.length && crypto.timingSafeEqual(a, b);
       });
-      if (index === -1) return next(new AppError('That backup code is not valid.', 401));
+      if (index === -1) {
+        logger.warn('auth.code.failed', { userId: user.id, purpose: 'login', reason: 'invalid_backup_code' });
+        return next(new AppError('That backup code is not valid.', 401));
+      }
       // Single use: remove it immediately so it can never be replayed.
       user.twoFactorBackupCodeHashes.splice(index, 1);
       await user.save();
@@ -104,6 +108,7 @@ async function verifyLogin(req, res, next) {
     }
 
     const token = signToken(user);
+    logger.info('auth.login.success', { userId: user.id, role: user.role, method: 'two_factor', ip: req.ip, requestId: req.id });
     res.status(200).json({ success: true, message: 'Login successful.', data: { user: user.toJSON(), token } });
   } catch (err) {
     next(err);

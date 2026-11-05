@@ -1,4 +1,4 @@
-const { isProduction } = require('../config/env');
+const logger = require('../utils/logger');
 
 // Translate known low-level errors into safe, generic client responses.
 // Nothing here ever returns stack traces, file paths, query details or config values.
@@ -18,23 +18,32 @@ function errorHandler(err, req, res, next) {
   if (known) {
     // Full detail to the server log only (never to the response) - a CastError's path/value in
     // particular is exactly what you need to track down which field/record triggered it.
-    if (!isProduction) {
-      console.warn('[HANDLED ERROR]', err.name, '-', err.message, {
-        path: err.path,
-        value: err.value,
-        reason: err.reason?.message,
-      });
-    }
+    logger.warn('error.handled', {
+      errorName: err.name,
+      message: err.message,
+      field: err.path,
+      value: err.value,
+      status: known.statusCode,
+      method: req.method,
+      path: req.originalUrl.split('?')[0],
+      requestId: req.id,
+    });
     return res.status(known.statusCode).json({ success: false, message: known.message });
   }
 
   const statusCode = err.isOperational ? err.statusCode : 500;
   const message = err.isOperational ? err.message : 'Something went wrong. Please try again later.';
 
+  // Anything that is not one of our own deliberate AppErrors is a bug or an outage (database down, code
+  // fault). The full detail, including the stack, goes to the log only and never to the response.
   if (!err.isOperational) {
-    console.error('[UNEXPECTED ERROR]', err); // full detail stays in the server log only
-  } else if (!isProduction) {
-    console.warn('[HANDLED ERROR]', err.message);
+    logger.error('error.unexpected', {
+      error: err,
+      method: req.method,
+      path: req.originalUrl.split('?')[0],
+      userId: req.user && req.user.id,
+      requestId: req.id,
+    });
   }
 
   return res.status(statusCode).json({ success: false, message });

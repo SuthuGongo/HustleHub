@@ -1,5 +1,6 @@
 const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
 const { rateLimit: limits } = require('../config/env');
+const logger = require('../utils/logger');
 
 const windowMs = limits.windowMinutes * 60 * 1000;
 
@@ -22,6 +23,7 @@ function buildLimiter({ limit, what, keyGenerator }) {
       const retryAfterSeconds = resetTime
         ? Math.max(1, Math.ceil((resetTime.getTime() - Date.now()) / 1000))
         : Math.ceil(windowMs / 1000);
+      logger.warn('security.rate_limited', { limit: what, ip: req.ip, path: req.originalUrl.split('?')[0], userId: req.user && req.user.id, requestId: req.id });
       res.set('Retry-After', String(retryAfterSeconds));
       res.status(429).json({
         success: false,

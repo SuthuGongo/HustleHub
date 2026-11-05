@@ -5,6 +5,8 @@ const AppError = require('../utils/AppError');
 const { REGISTRABLE_ROLES } = require('../utils/constants');
 const { startVerification } = require('./emailVerificationController');
 const { issueCode } = require('../services/otpService');
+const logger = require('../utils/logger');
+const { maskEmail } = logger;
 
 async function register(req, res, next) {
   try {
@@ -29,6 +31,7 @@ async function register(req, res, next) {
     // SMTP configured the code still reaches the person, just via the server's own console log (see
     // mailer.js), the same way a forgotten-password code does - never surfaced to the browser itself.
     const { verifyToken, maskedEmail, devCode } = await startVerification(newUser);
+    logger.info('auth.register.success', { userId: newUser.id, role: newUser.role, ip: req.ip, requestId: req.id });
 
     res.status(201).json({
       success: true,
@@ -48,17 +51,25 @@ async function login(req, res, next) {
 
     const genericAuthError = () => new AppError('Invalid email or password.', 401);
 
+    // One place for every failed attempt: what is logged is the reason, a masked address and the caller's IP,
+    // never the password. The person who is trying sees the same generic message whatever the reason.
+    const failed = (reason, userId) =>
+      logger.warn('auth.login.failed', { reason, userId, email: maskEmail(email), ip: req.ip, requestId: req.id });
+
     if (!user) {
       await dummyCompare(password); // keep response time similar to a real check
+      failed('unknown_email');
       return next(genericAuthError());
     }
 
     const passwordMatches = await comparePassword(password, user.passwordHash);
     if (!passwordMatches) {
+      failed('wrong_password', user.id);
       return next(genericAuthError());
     }
 
     if (!user.isActive) {
+      failed('account_disabled', user.id);
       return next(new AppError('This account has been disabled. Please contact support.', 403));
     }
 
@@ -66,6 +77,7 @@ async function login(req, res, next) {
       // Correct password, but the account was never finished registering (or the first code expired
       // unused). Pick up exactly where register() left off, rather than a separate code path.
       const { verifyToken, maskedEmail, devCode } = await startVerification(user);
+      logger.info('auth.login.email_verification_required', { userId: user.id, ip: req.ip, requestId: req.id });
       return res.status(200).json({
         success: true,
         message: 'Enter the verification code sent to your email to finish signing up.',
@@ -77,6 +89,7 @@ async function login(req, res, next) {
       // The password was correct, but that alone is not enough: issue a short-lived, narrowly-scoped
       // token and email a one-time code instead of a real session. No user data goes out yet.
       const { maskedEmail, devCode } = await issueCode(user, 'login');
+      logger.info('auth.login.two_factor_required', { userId: user.id, ip: req.ip, requestId: req.id });
       return res.status(200).json({
         success: true,
         message: 'Enter the verification code sent to your email.',
@@ -85,6 +98,7 @@ async function login(req, res, next) {
     }
 
     const token = signToken(user);
+    logger.info('auth.login.success', { userId: user.id, role: user.role, method: 'password', ip: req.ip, requestId: req.id });
 
     res.status(200).json({
       success: true,

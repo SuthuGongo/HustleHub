@@ -5,6 +5,7 @@ const Review = require('../models/Review');
 const { summarise } = require('../utils/ratings');
 const { containsRegex } = require('../utils/searchRegex');
 const AppError = require('../utils/AppError');
+const logger = require('../utils/logger');
 const { ROLES, GIG_CATEGORIES } = require('../utils/constants');
 
 const SORTS = {
@@ -27,7 +28,7 @@ async function findOwnedGig(req) {
   const gig = await Gig.findById(req.params.id);
   if (!gig) throw new AppError('Gig not found.', 404);
   if (gig.freelancer.toString() !== req.user.id) {
-    console.warn(`[SECURITY] Ownership violation: user=${req.user.id} tried ${req.method} on gig=${gig.id}`);
+    logger.warn('security.ownership_violation', { userId: req.user.id, method: req.method, gigId: gig.id, requestId: req.id });
     throw new AppError('You do not have permission to modify this gig.', 403);
   }
   return gig;

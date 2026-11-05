@@ -7,6 +7,9 @@ const app = require('./app');
 const { port, httpsPort, useHttps, sslKeyPath, sslCertPath } = require('./config/env');
 const { connectDb, disconnectDb } = require('./config/db');
 const { initChatSocket } = require('./sockets/chatSocket');
+const logger = require('./utils/logger');
+
+logger.installProcessHandlers();
 
 function resolvePath(p) {
   return path.isAbsolute(p) ? p : path.join(__dirname, '..', p);
@@ -24,6 +27,7 @@ function startServer() {
       cert: fs.readFileSync(certPath),
     };
     server = https.createServer(options, app).listen(httpsPort, () => {
+      logger.info('server.started', { protocol: 'https', port: httpsPort });
       console.log(`HustleHub+ API listening securely on https://localhost:${httpsPort}`);
     });
   } else {
@@ -33,6 +37,7 @@ function startServer() {
       );
     }
     server = http.createServer(app).listen(port, () => {
+      logger.info('server.started', { protocol: 'http', port });
       console.log(`HustleHub+ API listening on http://localhost:${port} (HTTP - dev fallback)`);
     });
   }
@@ -45,9 +50,10 @@ async function main() {
   initChatSocket(server); // attaches Socket.IO to the same HTTP(S) server - one port, one certificate, for both REST and real-time chat
 
   const shutdown = async (signal) => {
-    console.log(`${signal} received: shutting down.`);
+    logger.info('server.shutdown', { signal });
     server.close(async () => {
       await disconnectDb();
+      await logger.flush(); // last entries reach the log service before the process ends
       process.exit(0);
     });
   };
@@ -57,6 +63,6 @@ async function main() {
 
 main().catch((err) => {
   // Deliberately short: connection strings and stack traces must not be dumped to the console.
-  console.error('Failed to start HustleHub+ API:', err.message);
-  process.exit(1);
+  logger.error('server.start_failed', { message: err.message });
+  logger.flush().finally(() => process.exit(1));
 });

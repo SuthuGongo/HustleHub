@@ -6,6 +6,7 @@ const { refreshGigRating } = require('../utils/ratings');
 const { reviewDeadlineFrom, releaseExpiredEscrows } = require('../utils/escrow');
 const { findOrCreateConversation, postPreparedMessage } = require('../services/chatService');
 const AppError = require('../utils/AppError');
+const logger = require('../utils/logger');
 const { ROLES } = require('../utils/constants');
 
 // Which bookings may this user list? Clients see what they booked, freelancers what
@@ -60,6 +61,9 @@ async function createBooking(req, res, next) {
       await Booking.deleteOne({ _id: booking.id });
       throw err;
     }
+
+    logger.info('booking.created', { bookingId: booking.id, gigId: gig.id, clientId: req.user.id, freelancerId: gig.freelancer, amount: gig.price, requestId: req.id });
+    logger.info('transaction.recorded', { transactionId: transaction.id, bookingId: booking.id, amount: transaction.amount, status: transaction.status, requestId: req.id });
 
     res.status(201).json({
       success: true,
@@ -118,6 +122,7 @@ async function completeBooking(req, res, next) {
     booking.escrowStatus = 'awaiting_review';
     booking.reviewDeadline = reviewDeadlineFrom(now);
     await booking.save();
+    logger.info('booking.completed', { bookingId: booking.id, freelancerId: req.user.id, reviewDeadline: booking.reviewDeadline, requestId: req.id });
     res.status(200).json({ success: true, message: 'Booking marked as completed. The client now has a review window before funds release.', data: { booking } });
   } catch (err) {
     next(err);
@@ -138,6 +143,7 @@ async function releaseEscrow(req, res, next) {
     booking.escrowStatus = 'released';
     booking.resolvedAt = new Date();
     await booking.save();
+    logger.info('booking.funds_released', { bookingId: booking.id, clientId: req.user.id, freelancerId: booking.freelancer, amount: booking.price, requestId: req.id });
     res.status(200).json({ success: true, message: 'Funds released to the freelancer.', data: { booking } });
   } catch (err) {
     next(err);
@@ -163,6 +169,7 @@ async function disputeEscrow(req, res, next) {
     booking.disputedAt = new Date();
     booking.disputeReason = req.body.reason;
     await booking.save();
+    logger.warn('booking.disputed', { bookingId: booking.id, clientId: req.user.id, freelancerId: booking.freelancer, amount: booking.price, requestId: req.id });
 
     try {
       const conversation = await findOrCreateConversation({
@@ -176,7 +183,8 @@ async function disputeEscrow(req, res, next) {
         senderId: booking.client,
         text: `Refund requested for &quot;${booking.gigTitle}&quot;: ${booking.disputeReason}`,
       });
-    } catch {
+    } catch (err) {
+      logger.warn('booking.dispute_message_failed', { bookingId: booking.id, error: err, requestId: req.id });
       // The dispute itself is already saved and visible to admin either way; a message-thread hiccup
       // (e.g. the conversation unique index racing a near-simultaneous one) should never undo that.
     }

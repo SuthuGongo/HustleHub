@@ -3,6 +3,7 @@
 // everywhere a code is issued or checked, rather than four similar-but-subtly-different copies.
 const TwoFactorCode = require('../models/TwoFactorCode');
 const AppError = require('../utils/AppError');
+const logger = require('../utils/logger');
 const { sendMail } = require('../utils/mailer');
 const { codeEmailHtml } = require('../utils/emailTemplates');
 const { MAX_ATTEMPTS, CODE_TTL_MS, generateCode, hashCode, codeMatches } = require('../utils/twoFactor');
@@ -60,24 +61,31 @@ async function issueCode(user, purpose) {
 // Checks a submitted code against the newest unconsumed one for (user, purpose), enforcing the
 // attempt limit and expiry, and marks it consumed on success so it cannot be replayed.
 async function checkCode(userId, purpose, submitted) {
+  // Every wrong, expired or exhausted code is logged (never the code itself), because repeated failures
+  // for one account are what a brute-force attempt looks like.
+  const reject = (reason, message) => {
+    logger.warn('auth.code.failed', { userId, purpose, reason });
+    return new AppError(message, 401);
+  };
   const record = await TwoFactorCode.findOne({ user: userId, purpose, consumedAt: null }).sort({ createdAt: -1 });
   if (!record || record.expiresAt < new Date()) {
-    throw new AppError('That code has expired. Request a new one.', 401);
+    throw reject('expired', 'That code has expired. Request a new one.');
   }
   if (record.attempts >= MAX_ATTEMPTS) {
-    throw new AppError('Too many incorrect attempts. Request a new code.', 401);
+    throw reject('too_many_attempts', 'Too many incorrect attempts. Request a new code.');
   }
   if (!codeMatches(submitted, record.codeHash)) {
     record.attempts += 1;
     await record.save();
     const left = MAX_ATTEMPTS - record.attempts;
-    throw new AppError(
-      left > 0 ? `Incorrect code. ${left} attempt${left === 1 ? '' : 's'} left.` : 'Too many incorrect attempts. Request a new code.',
-      401
+    throw reject(
+      'incorrect',
+      left > 0 ? `Incorrect code. ${left} attempt${left === 1 ? '' : 's'} left.` : 'Too many incorrect attempts. Request a new code.'
     );
   }
   record.consumedAt = new Date();
   await record.save();
+  logger.info('auth.code.verified', { userId, purpose });
 }
 
 module.exports = {

@@ -1,6 +1,7 @@
 const User = require('../models/User');
 const TwoFactorCode = require('../models/TwoFactorCode');
 const AppError = require('../utils/AppError');
+const logger = require('../utils/logger');
 const { hashPassword, dummyCompare } = require('../utils/password');
 const { issueCode, checkCode } = require('../services/otpService');
 
@@ -56,6 +57,7 @@ async function resetPassword(req, res, next) {
     user.passwordHash = await hashPassword(req.body.newPassword);
     await user.save();
     await TwoFactorCode.deleteMany({ user: user.id, purpose: 'reset_password' });
+    logger.info('auth.password.reset', { userId: user.id, ip: req.ip, requestId: req.id });
 
     // No auto-login: the person must sign in again with the new password, which is worth the small
     // extra step for a security-sensitive account-recovery flow like this one.
