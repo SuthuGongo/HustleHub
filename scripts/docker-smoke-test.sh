@@ -25,7 +25,7 @@ echo "$headers" | grep -qi '^x-frame-options: DENY' && pass "X-Frame-Options: DE
 # 4. The database works: register, read the code the API logged, verify, and log in.
 run=$(date +%s)
 email="docker.smoke.${run}@gmail.com"
-password='SmokeTest123!'
+password='Blue-River-Mango-4821!'
 body=$(printf '{"name":"Docker Smoke","email":"%s","password":"%s","role":"freelancer"}' "$email" "$password")
 reg=$("${CURL[@]}" -X POST -H 'Content-Type: application/json' -d "$body" "$BASE/api/auth/register")
 token=$(echo "$reg" | jq -r '.data.verifyToken')
