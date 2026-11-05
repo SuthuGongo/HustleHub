@@ -1,0 +1,70 @@
+# Runs the whole HustleHub+ stack: MongoDB, the API and the web server.
+#
+#   1. cp .env.docker.example .env      (then fill in the two secrets, see the file)
+#   2. docker compose up --build
+#   3. open http://localhost:3000
+#
+# Only the web container is reachable from outside (port 3000). The database and the API sit on a private
+# network and are not published to the host.
+name: hustlehub
+
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: hustlehub
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:?Set MONGO_PASSWORD in .env}
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      # The image defaults to production, which refuses to run without a mail server. Compose defaults to
+      # development so verification and reset codes are printed in "docker compose logs backend".
+      # Set NODE_ENV=production in .env together with the SMTP_* values to send real email.
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: 5000
+      USE_HTTPS: "false"
+      TRUST_PROXY: 1
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      MONGODB_URI: mongodb://hustlehub:${MONGO_PASSWORD}@mongo:27017/hustlehub?authSource=admin
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      MAIL_FROM: ${MAIL_FROM:-HustleHub+ <no-reply@hustlehub.local>}
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "3000:8080"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+volumes:
+  mongo-data:
