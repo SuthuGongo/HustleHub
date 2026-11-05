@@ -31,6 +31,7 @@ A secure freelance marketplace built with the **MERN** stack (MongoDB, Express, 
 15. [CI/CD pipeline](#15-cicd-pipeline)
 16. [Static code analysis](#16-static-code-analysis)
 17. [Docker](#17-docker)
+18. [Logging and monitoring](#18-logging-and-monitoring)
 
 ---
 
@@ -878,3 +879,55 @@ The verification and reset codes are printed in the API's log when no mail serve
 **Settings that matter in a container.** `USE_HTTPS=false` because TLS ends at the edge (the local certificate is only for development). `TRUST_PROXY=1` tells the API there is one proxy in front of it, so rate limiting and logs see the real client address and not the proxy's. nginx sends the same security headers as the Vite preview server, including a strict Content-Security-Policy.
 
 **In the pipeline.** The `Docker` job in `.github/workflows/ci.yml` creates a throwaway `.env`, builds both images, starts the stack with `docker compose up --wait`, and fails if any container does not become healthy. It then runs `scripts/docker-smoke-test.sh` against the running containers: the app is served, the security headers are present, the API answers through the proxy, a user can register and verify an email (which proves the database is connected), the token works on the protected income and tax endpoint, and a request without a token gets 401. The job summary lists the running containers and the image sizes. You can run the same script yourself after `docker compose up`.
+
+## 18. Logging and monitoring
+
+Every important event in the API is written as one line of JSON. The same lines can also be sent to a cloud log service, Better Stack, where they can be searched, filtered and alerted on.
+
+**Where it lives.** `backend/src/utils/logger.js` is the only place that writes logs. The request logger is `backend/src/middleware/requestLogger.js`. The earlier `console.log` calls and the Morgan access log were replaced by it.
+
+**What is logged**
+
+| Event | Level | When | Main fields |
+|---|---|---|---|
+| `auth.login.success` | info | A login completes (password, email verification or two-factor code) | userId, role, method, ip |
+| `auth.login.failed` | warn | A login attempt fails | reason (`unknown_email`, `wrong_password`, `account_disabled`), masked email, ip |
+| `auth.login.two_factor_required`, `auth.login.email_verification_required` | info | The password was right but a second step is needed | userId, ip |
+| `auth.code.failed`, `auth.code.verified` | warn, info | A one-time code is wrong, expired or used up, or is accepted | userId, purpose, reason |
+| `auth.register.success`, `auth.password.reset` | info | An account is created, or a password is reset | userId, ip |
+| `auth.token.rejected` | warn | A bad, expired or misused token is presented | reason, ip, path |
+| `booking.created` | info | A client books a gig | bookingId, gigId, clientId, freelancerId, amount |
+| `transaction.recorded` | info | The payment record for a booking is written | transactionId, bookingId, amount, status |
+| `booking.completed`, `booking.funds_released`, `booking.disputed` | info, warn | The booking moves through escrow | bookingId, the people involved, amount |
+| `transaction.refunded`, `booking.dispute_released` | info | An admin resolves a dispute | bookingId, adminId, amount |
+| `security.access_denied`, `security.ownership_violation` | warn | Someone tries something their role or ownership does not allow | userId, role, method, path |
+| `security.rate_limited` | warn | A request is turned away by a rate limit | which limit, ip, path |
+| `admin.gig.removed`, `admin.user.status_changed` | warn | An admin removes a gig or disables or enables an account | adminId, target |
+| `error.unexpected` | error | A bug or outage (for example the database is down) | error name, message and stack, request id, path |
+| `error.handled` | warn | A known low-level error was turned into a safe response | error name, field, status |
+| `http.request` | info, warn, error | Every request, when it finishes | requestId, method, path, status, durationMs, ip, userId |
+| `server.started`, `server.shutdown`, `db.connected`, `process.*` | info, error | Start-up, shutdown, and crashes the app did not catch | port, signal, error |
+
+Every line also has a time (`dt`), a level, the event name (`message` and `event`), the service name and the environment. A request id is returned to the browser in the `X-Request-Id` header and appears in the error and event lines for that request, so one failing request can be followed from the browser to the log.
+
+**What is never logged**
+
+- Passwords, tokens, one-time codes, card details and authorization headers. Any field with a name like these is replaced by `[REDACTED]` by the logger, however deep it is nested, so a developer cannot log one by mistake.
+- Email addresses in full. Failed logins record a masked address (`t***@gmail.com`), which is enough to spot a repeated attacker.
+- Request bodies and query strings, which can carry search text or codes.
+- Line breaks. They are removed from every value, and each entry is a single JSON object, so text typed by a user cannot forge a second log entry (CodeQL's log-injection check passes on this code).
+- When no mail server is configured, the development email fallback prints the email text, including the code, in the console so the app can be tried without one. In production the app refuses to start that path and requires a real mail server.
+
+**Why these events.** Failed logins, rejected tokens, rate-limit hits and access-denied events are what an attack looks like, so they are warnings. Bookings, transactions and refunds are the money trail: they say who paid whom, how much, and what happened next. Errors carry the detail that the user is deliberately not shown. Ordinary requests give a timeline and response times.
+
+**Reading the logs**
+
+- Locally: the console, one JSON line per event. `LOG_LEVEL` (`debug`, `info`, `warn`, `error` or `silent`) controls how much.
+- In Docker: `docker compose logs backend`.
+- In the API tests: every run saves the server's log to `postman/reports/server.log`.
+
+**Cloud logging with Better Stack.** When `BETTERSTACK_SOURCE_TOKEN` and `BETTERSTACK_INGEST_HOST` are set, every log line is also sent to Better Stack over HTTPS in batches (every two seconds, or at 50 entries), using the source token as a Bearer token. Sending is fire and forget: if Better Stack is slow, unreachable or the token is wrong, the batch is dropped and a single warning is written to the console, and the API is not affected. The last entries are sent when the server shuts down. The token and host are environment variables (in `.env`, in Render's environment settings, or as repository secrets) and are never in the code.
+
+To set it up: create a free Better Stack account, go to Telemetry, then Sources, then Connect source, pick Node.js, and copy the source token and the ingesting host from the source's page. Put them in the two environment variables and restart the API. Log lines then appear in Live tail within seconds, and can be filtered, for example `event:auth.login.failed` for failed logins.
+
+**Tested by:** `src/utils/logger.test.js` (the output format, redaction of secrets, removal of line breaks, masked emails, the batching and failure handling of the Better Stack sender, and the request logger), `src/middleware/errorHandler.test.js` (an unexpected error is logged in full while the client sees only a generic message), the `authorize` test (an access-denied event is recorded), and the API test run, whose saved server log contains the login, booking, transaction, refund, rate-limit and error events from the real requests.
