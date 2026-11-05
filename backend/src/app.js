@@ -3,7 +3,8 @@ const helmet = require('helmet');
 const cors = require('cors');
 const requestLogger = require('./middleware/requestLogger');
 
-const { corsOrigin, nodeEnv, useHttps, trustProxy } = require('./config/env');
+const { corsOrigin, nodeEnv, useHttps, trustProxy, serveFrontend, frontendDist } = require('./config/env');
+const { chooseHeaders, mountFrontend } = require('./utils/frontendHosting');
 const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
 const gigRoutes = require('./routes/gigRoutes');
@@ -22,24 +23,23 @@ app.set('trust proxy', trustProxy);
 // ---- Security headers (Helmet) ----
 // This service only ever returns JSON, so its Content-Security-Policy can be as strict as possible:
 // nothing may be loaded, framed, or submitted to from a response of this API.
-app.use(
-  helmet({
-    contentSecurityPolicy: {
-      useDefaults: false,
-      directives: {
-        defaultSrc: ["'none'"],
-        baseUri: ["'none'"],
-        formAction: ["'none'"],
-        frameAncestors: ["'none'"],
-        ...(useHttps ? { upgradeInsecureRequests: [] } : {}),
-      },
+const apiHeaders = helmet({
+  contentSecurityPolicy: {
+    useDefaults: false,
+    directives: {
+      defaultSrc: ["'none'"],
+      baseUri: ["'none'"],
+      formAction: ["'none'"],
+      frameAncestors: ["'none'"],
+      ...(useHttps ? { upgradeInsecureRequests: [] } : {}),
     },
-    strictTransportSecurity: { maxAge: 31536000, includeSubDomains: true },
-    referrerPolicy: { policy: 'no-referrer' },
-    crossOriginResourcePolicy: { policy: 'same-site' },
-    // X-Content-Type-Options: nosniff, X-Frame-Options, COOP, hidden X-Powered-By etc. stay on Helmet defaults.
-  })
-);
+  },
+  strictTransportSecurity: { maxAge: 31536000, includeSubDomains: true },
+  referrerPolicy: { policy: 'no-referrer' },
+  crossOriginResourcePolicy: { policy: 'same-site' },
+  // X-Content-Type-Options: nosniff, X-Frame-Options, COOP, hidden X-Powered-By etc. stay on Helmet defaults.
+});
+app.use(serveFrontend ? chooseHeaders(apiHeaders) : apiHeaders);
 
 app.use(
   cors({
@@ -84,8 +84,11 @@ if (nodeEnv === 'test') {
     const message = readTestInbox(String(req.query.to || ''));
     if (!message) return res.status(404).json({ success: false, message: 'No test-mode email found for that address.' });
     res.status(200).json({ success: true, data: message });
-  });
+});
 }
+
+// One-container hosting (Render): the same server also serves the built React app for every non-API page.
+if (serveFrontend) mountFrontend(app, frontendDist);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

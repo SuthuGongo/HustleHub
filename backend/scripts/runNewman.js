@@ -93,6 +93,7 @@ async function main() {
   const testEnv = {
     ...process.env,
     NODE_ENV: 'test',
+    PASSWORD_BREACH_CHECK: 'false', // the API tests never depend on an outside service
     EXPOSE_TEST_CODES: 'true', // lets the API return email codes ONLY for this test run - see services/otpService.js
     USE_HTTPS: 'true',
     HTTPS_PORT: String(TEST_PORT),

@@ -14,6 +14,7 @@ const toQuery = (params = {}) => {
 export const register = (payload) => request('/auth/register', { method: 'POST', body: payload });
 export const login = (payload) => request('/auth/login', { method: 'POST', body: payload });
 export const getMe = () => request('/users/me');
+export const listSignIns = () => request('/users/me/sign-ins');
 
 // ---- email verification (finishing registration) ----
 export const verifyEmail = (verifyToken, code) => request('/auth/verify-email', { method: 'POST', body: { verifyToken, code } });
@@ -70,6 +71,8 @@ export const adminTransactions = () => request('/admin/transactions');
 export const adminEscrow = () => request('/admin/escrow');
 export const adminDisputes = () => request('/admin/disputes');
 export const adminResolveDispute = (id, resolution) => request(`/admin/disputes/${id}/resolve`, { method: 'POST', body: { resolution } });
+export const adminAudit = () => request('/admin/audit');
+export const adminVerifyAudit = () => request('/admin/audit/verify');
 export const adminMessages = (status) => request(`/admin/messages${status ? `?status=${status}` : ''}`);
 export const adminSetMessageStatus = (id, status) => request(`/admin/messages/${id}/status`, { method: 'PATCH', body: { status } });
 export const adminReplyToMessage = (id, text) => request(`/admin/messages/${id}/reply`, { method: 'POST', body: { text } });

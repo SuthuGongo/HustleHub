@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { decodeEntities } from '../utils/text';
-import { formatRand, pluralise } from '../utils/format';
+import { describeDevice, formatRand, pluralise } from '../utils/format';
 import { validateGig, validateLogin, validateRegister } from '../utils/validation';
 
 describe('decodeEntities', () => {
@@ -67,5 +67,24 @@ describe('validateGig', () => {
     expect(validateGig({ ...ok, title: 'abc' }).title).toBeDefined();
     expect(validateGig({ ...ok, description: 'too short' }).description).toBeDefined();
     expect(validateGig({ ...ok, category: 'hacking' }).category).toBeDefined();
+  });
+});
+
+describe('describeDevice', () => {
+  it('names the browser and the system, checking Edge and Opera before Chrome', () => {
+    expect(describeDevice('Mozilla/5.0 (Windows NT 10.0) Chrome/130 Safari/537 Edg/130')).toBe('Edge on Windows');
+    expect(describeDevice('Mozilla/5.0 (Windows NT 10.0) Chrome/130 Safari/537 OPR/110')).toBe('Opera on Windows');
+    expect(describeDevice('Mozilla/5.0 (Windows NT 10.0) Chrome/130 Safari/537')).toBe('Chrome on Windows');
+    expect(describeDevice('Mozilla/5.0 (X11; Linux x86_64) Firefox/131.0')).toBe('Firefox on Linux');
+    expect(describeDevice('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15) Safari/605')).toBe('Safari on macOS');
+    expect(describeDevice('Mozilla/5.0 (Linux; Android 14) Chrome/130 Mobile Safari/537')).toBe('Chrome on Android');
+  });
+
+  it('copes with a missing or unrecognised browser string', () => {
+    expect(describeDevice('')).toBe('Unknown device');
+    expect(describeDevice(undefined)).toBe('Unknown device');
+    expect(describeDevice('curl/8.0')).toBe('Unknown device');
+    expect(describeDevice('Firefox/131')).toBe('Firefox');
+    expect(describeDevice('X11 Linux')).toBe('Linux');
   });
 });

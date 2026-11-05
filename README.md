@@ -32,6 +32,8 @@ A secure freelance marketplace built with the **MERN** stack (MongoDB, Express, 
 16. [Static code analysis](#16-static-code-analysis)
 17. [Docker](#17-docker)
 18. [Logging and monitoring](#18-logging-and-monitoring)
+19. [Final security review](#19-final-security-review)
+20. [Deploying on Render](#20-deploying-on-render)
 
 ---
 
@@ -70,7 +72,7 @@ Anyone can register as a client or freelancer. **Admin accounts cannot be create
 - A plain, professional interface: a flat warm background, white cards with hairline borders, one deep-green accent colour, and no gradients, glows or floating decoration. Details that remain: the login/register card closes in on its cut corners and reopens as the other form, gig cards use a flat muted colour and icon per category, an income total that counts up, a perforated receipt ticket, and a payment card that fills in live as you type. All motion respects `prefers-reduced-motion`
 - **Escrow-style payments.** A booking's money isn't simply "paid" the instant it's created - it's held by the platform (`escrowStatus: 'held'`), and only reaches the freelancer once the client confirms the work or a configurable review window quietly expires. See [section 12](#12-escrow-holding-funds-until-confirmed-or-reviewed) for the full lifecycle
 - Security controls throughout: validation, sanitisation, rate limiting, Helmet + Content Security Policy, HTTPS, safe error handling
-- Automated tests: a 431-request Postman/Newman API suite (1,903 assertions), 41 backend unit tests (Jest) and 375 frontend tests across 30 files (Vitest + React Testing Library)
+- Automated tests: a 440-request Postman/Newman API suite (1,970 assertions), 209 backend unit tests (Jest) and 384 frontend tests across 31 files (Vitest + React Testing Library)
 
 ## 3. Architecture
 
@@ -347,6 +349,7 @@ Edit `backend/.env`:
 | `MONGODB_URI` | **Required.** e.g. `mongodb://127.0.0.1:27017/hustlehub` or your Atlas connection string |
 | `CORS_ORIGIN` | Allowed frontend origin(s). Default `https://localhost:3000` |
 | `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_NAME` | Used only by `npm run seed:admin`. Password needs ≥ 12 characters, a number and an uppercase letter |
+| `LOCKOUT_MAX_ATTEMPTS`, `LOCKOUT_MINUTES`, `PASSWORD_BREACH_CHECK` | Account lockout threshold (default 5 wrong passwords) and duration (default 15 minutes), and the breached-password lookup (on unless set to `false`), see [section 8a](#8a-additional-security-features-part-3) |
 | `RATE_LIMIT_*` | Optional overrides for the rate limits, including `RATE_LIMIT_CONTACT_MAX` for the contact form, `RATE_LIMIT_OTP_MAX` shared by 2FA, email verification and password reset, and `RATE_LIMIT_CHAT_MAX` for chat messages (defaults in [Security](#8-security-measures)) |
 | `REVIEW_WINDOW_HOURS` | How long a client has to release or dispute a completed booking before funds auto-release to the freelancer (§12). Default `72` (3 days); set something small (e.g. `1` or a fraction like `0.05` for ~3 minutes) to demo the auto-release without waiting days |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_SECURE` / `SMTP_USER` / `SMTP_PASS` / `MAIL_FROM` | Optional. Leave blank to run in demo mode - login-2FA and enable-2FA codes are shown on screen as well as logged to the console; registration and password-reset codes are only ever logged to the console. Fill in to send all of them as real email instead |
@@ -447,6 +450,8 @@ Base URL: `https://localhost:5443/api`. All responses use `{ "success": boolean,
 | GET | `/admin/gigs` | admin | All gigs |
 | DELETE | `/admin/gigs/:id` | admin | Remove any gig |
 | GET | `/admin/transactions` | admin | All transactions |
+| GET | `/admin/audit` | admin | The newest 50 entries of the tamper-evident audit trail of money events (§8a) |
+| GET | `/admin/audit/verify` | admin | Recomputes every hash in the audit trail and reports `ok`, how many entries were checked, and where the chain breaks if it does (§8a) |
 | GET | `/admin/escrow` | admin | Every booking whose funds are currently held (`held` or `awaiting_review`), plus the total amount held. Auto-releases any expired review window first (§12) |
 | GET | `/admin/disputes` | admin | Bookings a client has disputed, oldest first |
 | POST | `/admin/disputes/:id/resolve` | admin | Resolve a dispute `{ resolution: 'released' \| 'refunded' }` - all-or-nothing, no partial splits |
@@ -510,6 +515,10 @@ How it is enforced:
 | Price tampering | Booking price is read from the gig on the server; request `amount`/`price` is ignored | `bookingController.js` |
 | Injection (NoSQL) | Body sanitiser strips `$…`/dotted keys; every input validated for type; `isMongoId` on ids; Mongoose `sanitizeFilter` (with internally-built operator filters - `$gte`, `$lte`, `$in` - explicitly marked safe via `mongoose.trusted()`, since `sanitizeFilter` cannot otherwise tell a developer's own operator from an injected one, see §12 for a real bug this caused); regex search input escaped | `sanitizeInput.js`, `resourceValidators.js`, `config/db.js`, `gigController.js`, `adminController.js`, `utils/escrow.js` |
 | Stored XSS | Every free-text field is HTML-escaped on input (`escape()`); React escapes on output; the UI decodes the entities back only into text nodes | validators, `frontend/src/utils/text.js` |
+| Password guessing against one account | Per-account lockout: 5 wrong passwords lock the account for 15 minutes, even against the correct password (§8a) | `utils/accountLockout.js`, `authController.js` |
+| Weak, common or breached passwords | Common-password list, no name or email inside the password, and a k-anonymity breach lookup, at registration and reset (§8a) | `utils/passwordPolicy.js`, validators |
+| Financial records changed behind the application's back | Every money event is added to a hash-chained audit trail; the admin **Verify integrity** check finds an edited or deleted entry, and the latest hash is also kept in the cloud log (§8a) | `services/auditTrail.js`, `models/AuditEntry.js` |
+| A sign-in the owner did not make goes unnoticed | The Security settings page lists recent sign-ins with device, time and address (§8a) | `utils/signInHistory.js`, `AccountSecurityPage.jsx` |
 | Brute force / abuse | `express-rate-limit`: **auth** 20 / 15 min per IP; **booking** 10 / 15 min per user; **all other API** (broad safety net, deliberately generous so it never masks the specific limiters above under normal heavy use - see §13) 2000 / 15 min per IP. `429` responses carry `Retry-After`, `RateLimit-*` headers and a JSON message with `retryAfterSeconds` | `middleware/rateLimiter.js` |
 | User enumeration | Identical `401` message for unknown email and wrong password, with equalised bcrypt timing | `authController.js`, `utils/password.js` |
 | Clickjacking, MIME sniffing, downgrade | Helmet: CSP `default-src 'none'; frame-ancestors 'none'`, HSTS, `nosniff`, `Referrer-Policy: no-referrer`, CORP; `Cache-Control: no-store` on all API responses | `app.js` |
@@ -541,6 +550,41 @@ How it is enforced:
 | Double-charging / duplicate transactions | A unique index on `Transaction.booking` means a booking can only ever have one transaction, whatever creates it | `models/Transaction.js` |
 
 Front-end specifics: the JWT is kept in `sessionStorage` (cleared when the tab closes), sent only in the `Authorization` header, never rendered or logged; any `401` on an authenticated call logs the user out; only the API's controlled `message` is ever shown to users.
+
+### 8a. Additional security features (Part 3)
+
+Four controls were added beyond the existing rate limits, two-factor authentication and input validation. Each closes a gap the earlier controls leave open.
+
+**1. Account lockout (per account, not per address).** The rate limiters count requests from one IP address, so an attacker who changes address, or uses many, can keep guessing one person's password. The lockout counts failures against the account itself.
+
+- After 5 wrong passwords in a row (`LOCKOUT_MAX_ATTEMPTS`) the account refuses every login for 15 minutes (`LOCKOUT_MINUTES`) and answers `423`. While it is locked even the correct password is refused and no token is issued, so a lucky guess is worthless.
+- The failure counter is increased inside the database (`$inc`), so guesses that arrive at the same moment are all counted. A correct password clears the counter. Resetting the password by email also lifts the lock, because it proves control of the address.
+- The lock is written to the log as `security.account_locked` (level warn) and every refused attempt as `auth.login.failed` with the reason `account_locked`, so a guessing attack is visible in Better Stack.
+- Trade-off: an attacker can lock someone else out for 15 minutes by failing five times. The lock is short, resetting the password lifts it, and the alternative is unlimited guessing. The `423` message does reveal that the email has an account; only the locked case does, and the same is true of the existing rate limit message.
+- Code: `utils/accountLockout.js`, `controllers/authController.js`, `controllers/passwordResetController.js`, fields on `models/User.js`.
+
+**2. Password policy: common passwords, personal details and known breaches.** A password such as `Password1` meets the length, number and capital letter rules and is among the first things an attacker tries. Three checks are added to registration and to password reset, so a reset can never produce a weaker password than signing up would:
+
+- A built-in list of the most common passwords, compared without regard to capital letters. Works offline and is always on.
+- The password must not contain the person's name or the name part of their email.
+- A lookup in the Pwned Passwords service for passwords that appear in known data breaches. Only the first five characters of the password's SHA-1 hash are sent; the service answers with every hash that starts the same way and the comparison is made here, so the service never learns which password was checked (k-anonymity). If the service is slow or down the password is accepted and a `security.breach_check_unavailable` warning is logged, so an outside outage cannot stop people signing up. `PASSWORD_BREACH_CHECK=false` turns the lookup off; the automated tests do this so they never depend on an outside service.
+- Code: `utils/passwordPolicy.js`, `middleware/validators.js`, `middleware/resourceValidators.js`.
+
+**3. Recent sign-ins.** Every successful sign-in (by password, by email verification, or with a two-factor code) is recorded with the time, the IP address, the browser and how the person signed in. The Security settings page lists the latest ten under "Recent sign-ins", so a sign-in that was not the owner's can be spotted. The list is read with the id from the token, so nobody can see another person's, and no password, token or code is ever stored in it. Only the newest 50 per person are kept. Code: `models/SignIn.js`, `utils/signInHistory.js`, `GET /api/users/me/sign-ins`, `pages/AccountSecurityPage.jsx`.
+
+**4. Tamper-evident audit trail for money events.** The database holds the record of who paid whom, and anyone with access to it could change an amount or delete a refund without going through the application. Every payment, work completion, release, refund and dispute is therefore also written to an audit chain, where each entry stores the SHA-256 hash of the entry before it, as a very small blockchain.
+
+This protects the escrow flow. Escrow gives the money one controlled path (paid, completed, released, refunded, disputed), and the audit trail makes any attempt to alter that path afterwards detectable.
+
+- An entry's hash covers its number, time, event, booking, who did it, the amount, a short note and the previous hash. Editing any of these changes the hash, deleting an entry leaves a gap in the numbering, and rewriting an entry together with its own hash still fails because the next entry no longer follows it.
+- Admin page, **Audit trail** tab: the latest entries, and a **Verify integrity** button that reads the whole chain, recomputes every hash and answers either "Chain intact" or "Chain broken at entry N" with the reason (`GET /api/admin/audit/verify`).
+- The audit rows are only ever added by the application. Two requests that try to take the same number at the same moment are resolved by a unique index, and the loser takes the next number.
+- Deleting the newest entries cannot be seen from inside the database (nothing is left to disagree with them), so each new entry's number and fingerprint (its hash, logged under that name because the logger blanks any field called `hash`) is also written to the structured log, which goes to Better Stack, giving an outside record of the latest hash (`audit.entry_written`).
+- A failure to write an entry is logged as `audit.write_failed` and does not undo the payment. Releases made automatically when a review window expires are recorded too.
+- `npm run demo:tamper-audit -- <entry number> <new amount>` changes one amount directly in the database (demonstration only), to show the check catching it. Run it again with the original amount to put things back.
+- Code: `models/AuditEntry.js`, `services/auditTrail.js`, `controllers/adminController.js`, `pages/AdminPage.jsx`.
+
+**Tested by:** `services/auditTrail.test.js` (numbering, linking, an edited amount, a deleted entry, a rewritten hash, two writers racing, a failed write), `AdminAudit.test.jsx`, `utils/accountLockout.test.js` and `utils/passwordPolicy.test.js` (limits, atomic counting, lock and clear, hash prefix only is sent, match and no match, outage handled), `utils/signInHistory.test.js`, frontend tests for the sign-in list, and the API test folders `07c - Tamper-evident audit trail` (admin only, entries listed, chain verifies) and `02c - Account lockout, password policy and sign-ins`, which locks a real account with five wrong passwords, shows the correct password is refused while locked, refuses a common password at registration and at reset, unlocks the account by resetting the password, and reads the sign-in list.
 
 ### 8b. Custom pages for different scenarios
 
@@ -606,7 +650,7 @@ cd frontend
 npm test
 ```
 
-375 tests across 30 files (`npx vitest run`) covering component rendering and user interaction:
+384 tests across 31 files (`npx vitest run`) covering component rendering and user interaction:
 
 - **Simulated payments (`GigDetailPage`, `BookingsPage`, `PaymentFields`, `CardPreview`, `utils/card`)** – booking a gig walks through review → demo card entry → confirmation inside one dialog; the card form's Luhn/expiry/CVC validation (unit-tested directly in `utils/card.test.js`) gates the Pay button; the server's error is shown and the dialog stays open if the booking request fails; a "Verifying your payment…" pause auto-redirects to the conversation with the freelancer, and a one-time dismissible banner confirms it on the Messages page
 - **Escrow (`BookingsPage`, `AdminEscrow`)** – a client sees "Release funds now" / "Report a problem" only while a booking is `awaiting_review`, and a live countdown to the auto-release deadline; releasing shows "Paid out", disputing requires a reason and shows "Awaiting resolution"; a freelancer sees a read-only "Pending payments" summary of what's currently held, never the release/dispute controls (client-only); the admin "Active bookings" tab lists everything currently held with a running total, and "Disputes" lets an admin resolve one (release or refund) with the list correctly emptying afterwards
@@ -803,9 +847,9 @@ The CircleCI project holds three environment variables (`SONAR_TOKEN`, `SONAR_OR
 
 | Suite | Tool | Size |
 |---|---|---|
-| Backend unit tests | Jest | 41 tests |
-| API tests | Postman collection run by Newman against the real server and database | 431 requests, 1,903 assertions |
-| Frontend tests | Vitest and React Testing Library | 375 tests in 30 files |
+| Backend unit tests | Jest | 209 tests |
+| API tests | Postman collection run by Newman against the real server and database | 440 requests, 1,970 assertions |
+| Frontend tests | Vitest and React Testing Library | 384 tests in 31 files |
 
 **Evidence.** The Actions tab of the GitHub repository lists every run, with each job and step. The CircleCI project page lists the CircleCI pipelines, including an early failed run that was fixed.
 
@@ -906,6 +950,7 @@ Every important event in the API is written as one line of JSON. The same lines 
 | `error.unexpected` | error | A bug or outage (for example the database is down) | error name, message and stack, request id, path |
 | `error.handled` | warn | A known low-level error was turned into a safe response | error name, field, status |
 | `http.request` | info, warn, error | Every request, when it finishes | requestId, method, path, status, durationMs, ip, userId |
+| `audit.entry_written`, `audit.verified`, `audit.write_failed` | info, info or error, error | A money event is added to the audit chain; an admin runs the integrity check; an entry could not be written | entry number and fingerprint, result and entries checked, error |
 | `server.started`, `server.shutdown`, `db.connected`, `process.*` | info, error | Start-up, shutdown, and crashes the app did not catch | port, signal, error |
 
 Every line also has a time (`dt`), a level, the event name (`message` and `event`), the service name and the environment. A request id is returned to the browser in the `X-Request-Id` header and appears in the error and event lines for that request, so one failing request can be followed from the browser to the log.
@@ -931,3 +976,159 @@ Every line also has a time (`dt`), a level, the event name (`message` and `event
 To set it up: create a free Better Stack account, go to Telemetry, then Sources, then Connect source, pick Node.js, and copy the source token and the ingesting host from the source's page. Put them in the two environment variables and restart the API. Log lines then appear in Live tail within seconds, and can be filtered, for example `event:auth.login.failed` for failed logins.
 
 **Tested by:** `src/utils/logger.test.js` (the output format, redaction of secrets, removal of line breaks, masked emails, the batching and failure handling of the Better Stack sender, and the request logger), `src/middleware/errorHandler.test.js` (an unexpected error is logged in full while the client sees only a generic message), the `authorize` test (an access-denied event is recorded), and the API test run, whose saved server log contains the login, booking, transaction, refund, rate-limit and error events from the real requests.
+
+## 19. Final security review
+
+This is the review of the finished application before hand-in. It covers the four areas the brief names (injection, cross-site scripting, authentication weaknesses and access control), then the other things a reviewer would look at, and ends with what is still weak and why it was left.
+
+**How the review was done.** Every route and every file that touches user input was read. That reading was backed by tools and by tests that anyone can re-run:
+
+| Check | What it covers | Result |
+|---|---|---|
+| CodeQL (`security-and-quality`) | Data-flow problems in the code: injection, unsafe logging, disabled certificate checks | 17 alerts on the first run, all fixed, 0 now (§16) |
+| SonarCloud | Vulnerabilities, hotspots, bugs, code smells | 0 issues, 0 hotspots, rated A (§16) |
+| ESLint with `eslint-plugin-security` | Risky patterns while coding | 0 errors |
+| `npm audit` | Known vulnerabilities in packages | 0 in the packages that ship to production; see 19.7 for the test tools |
+| Access-control matrix test (`src/routes/accessMatrix.test.js`) | Every API route, as an anonymous caller and as every role that should be refused | 117 checks pass |
+| Newman API suite | 440 requests with 1,970 assertions, including injection, XSS, token and role abuse | 0 failures |
+| Live attack check (`npm run security:probe`) | 25 attacks against a running API, listed below | 25 of 25 refused or neutralised |
+
+### 19.1 Injection
+
+| Weakness looked for | What was found | Defence | Checked by |
+|---|---|---|---|
+| NoSQL injection through the body (`{"email": {"$ne": null}}`) | The API uses MongoDB, so operator objects in a login or a search are the real injection risk (there is no SQL anywhere) | Three layers. `sanitizeInput` removes any key starting with `$`, containing `.` or named `__proto__`, `constructor` or `prototype`. Every field is validated for its type (a price must be a number, an id must be a Mongo id). Mongoose `sanitizeFilter` is on globally and the few operators the code builds itself are marked `mongoose.trusted()`. Queries that use a user value wrap it in `$eq` | Live check 1, 4, 5, 6; Newman registration and login folders; CodeQL (the 11 query alerts were fixed this way) |
+| NoSQL injection through the query string (`?category[$ne]=x`) | Express 5 reads the query string without nested objects, so the operator is just an unknown key | Query parameters are also validated against fixed lists and types | Live check 2 |
+| Regular-expression injection and ReDoS in the search boxes | Admin searches build a regular expression from typed text | Every regex character is escaped before the expression is built (`utils/searchRegex.js`) | Live check 3; Newman admin search requests |
+| Prototype pollution | A `__proto__` key in a JSON body | Removed by `sanitizeInput`; the request is then refused by validation | Live check 5 |
+| Log injection (forging log lines) | CodeQL found two places where text from a user reached a log line | The logger removes line breaks from every value and writes each event as one JSON object (§18) | CodeQL, `logger.test.js` |
+| Email header injection | The contact form's reply link and the mailer put addresses in headers | Addresses are validated as emails and URL-encoded; line breaks are stripped in the mailer | Newman contact folder |
+| Command and file injection | The API never starts a process from user input and has no file upload | Nothing to defend; recorded so the reviewer does not look for it | Code review |
+
+### 19.2 Cross-site scripting (XSS)
+
+| Weakness looked for | What was found | Defence | Checked by |
+|---|---|---|---|
+| Stored XSS (a script saved in a title, description, message, review or contact message) | The main risk, because gigs and chat show text written by other people | Every free-text field is HTML-escaped when it is saved (`escape()` in the validators; one shared function for chat). React also escapes everything it draws | Live check 7 and 8; Newman: a script tag in a name is stored escaped and comes back escaped |
+| DOM XSS in the browser | Whether the front end ever builds HTML from text | There is no `dangerouslySetInnerHTML`, `innerHTML` or `eval` anywhere in the front end. The one function that turns `&amp;` back into `&` for display only ever writes into text nodes | Code search; `utils.test.js` |
+| What an injected script could do if one got through | It could read the login token | A strict Content-Security-Policy on both servers: `script-src 'self'`, no inline scripts or styles, `object-src 'none'`, `connect-src 'self'`, `frame-ancestors 'none'`. The API's own policy is `default-src 'none'`. Fonts are bundled, not loaded from another site | Security-header assertions in Newman; the Docker smoke test checks the headers on the running container |
+| Reflected XSS through error messages | Error messages that echo the input | The central error handler returns fixed, controlled messages and never echoes the request | `errorHandler.test.js`; Newman "no internals leaked" assertion on every request |
+
+Left as it is: the login token is kept in `sessionStorage`, so a script that did run could read it. That is why the policy above is strict and why input is escaped on the way in. See 19.7.
+
+### 19.3 Authentication weaknesses
+
+| Weakness looked for | Status | How it is handled |
+|---|---|---|
+| Passwords stored badly | Fixed by design | bcrypt with 12 rounds; the hash is never selected by default and is removed from every JSON response |
+| Weak, common or breached passwords | Closed in Part 3 | Length, number and capital letter, plus a common-password list, no name or email inside the password, and a breach lookup that sends only a hash prefix (§8a) |
+| Guessing one account's password | Closed in Part 3 | Five wrong passwords lock the account for 15 minutes, even against the correct password; the lock is logged. Per-address rate limits sit on top (§8a, §8) |
+| Finding out which emails have accounts | Closed | The same message for an unknown email and a wrong password, with the same response time (a dummy hash is checked); the same reply from forgot-password whether or not the account exists |
+| Forged or tampered tokens | Closed | HS256 is fixed when signing and when checking, so an unsigned (`alg: none`) token or one signed with another key is refused; the secret must be set or the server will not start; tokens expire (default 1 hour) |
+| A role written inside the token | Closed | The role and the active flag are read from the database on every request, not from the token. A client token that claims admin gets 403; a disabled account loses access at once |
+| A half-finished login used as a real one | Closed | The token given between the password and the two-factor or email code carries a `stage` claim and is refused everywhere except the code step |
+| Guessing or reusing one-time codes | Closed | Six digits from a secure random generator, stored hashed, valid 10 minutes, five wrong guesses burn the code, a used code cannot be used again, and there is a limiter on every code route |
+| Turning off two-factor with a stolen session | Closed | Turning it off asks for the password again |
+| Becoming admin by registering | Closed | `admin` is refused at registration (validator and controller); admins are created only by a script with server access |
+| Account takeover going unseen | Reduced | The Security settings page lists recent sign-ins with device, time and address (§8a) |
+| A token still working after the password is changed | **Open** | See 19.7 |
+| Account lockout used to lock someone else out | **Accepted** | See 19.7 |
+
+### 19.4 Access control
+
+| Weakness looked for | Status | How it is handled |
+|---|---|---|
+| Routes with no login or the wrong role | Closed and guarded | `src/routes/accessMatrix.test.js` lists all 56 routes with who may call each. It then calls every protected route with no token (expects 401) and with each role that should be refused (expects 403). A second test counts the routes in the route files and fails if the list is shorter, so a new endpoint cannot be added without recording who may use it |
+| Reading or changing another person's record (IDOR) | Closed | Every lookup is scoped to the signed-in person in the same query (`{ _id, client: req.user.id }`), not fetched and then checked. A stranger gets `404`, the same answer as for an id that does not exist, so the id is not confirmed. Applies to bookings, conversations, contact messages, gigs and reviews |
+| Doing a step that belongs to the other side | Closed | Completing is freelancer-only, releasing and disputing are client-only, resolving disputes is admin-only, and each action also checks the booking's state, so a second release or a release during a dispute gets `409` |
+| Price tampering | Closed | The price is read from the gig on the server; an `amount` or `price` sent by the client is ignored (live check 19: sending `amount: 1` for a R500 gig is charged R500) |
+| Mass assignment (sending fields you may not set) | Closed | Controllers pick the fields they accept; `role`, `isActive`, `status`, `user` and `reference` can never be set from a request body |
+| Seeing hidden data | Closed | Paused gigs are visible only to their owner and admins; responses never contain other people's email addresses; the CSV report and the audit trail are admin-only |
+| Cross-site request forgery | Not applicable | The token is sent in the `Authorization` header, not in a cookie, so a page on another site cannot make the browser send it. CORS allows only the configured origins |
+| Real-time chat bypass | Closed | The Socket.IO handshake runs the same token check as the API, re-reads the role and active flag from the database, refuses pending tokens, and every conversation action checks the person is one of its two participants |
+| Financial records edited behind the application | Detected | The hash-chained audit trail and its integrity check (§8a) |
+
+### 19.5 Other areas reviewed
+
+| Area | Finding |
+|---|---|
+| Sensitive data in responses and errors | Stack traces, file paths and driver errors never reach the client; the Newman suite asserts this on every response. Passwords, tokens, codes, card data and authorization headers are removed from logs by the logger, whatever their depth |
+| Transport | HTTPS on both servers locally; HSTS, `nosniff`, `no-referrer` and `Cache-Control: no-store` on API responses. In Docker and on Render the encryption ends at the edge and `TRUST_PROXY` makes the API see the real client address |
+| Secrets | No secret is in the repository. The JWT secret, database password and Better Stack token come from environment variables, and CI creates throw-away secrets for each run |
+| Denial of service | Rate limits per address, per user and per route; a 10 KB body limit (live check 22); validation limits on every field |
+| Logging and monitoring | Logins, failures, locks, rejected tokens, access denials, bookings, refunds and errors are all logged as structured events and sent to Better Stack (§18) |
+| Payments | Simulated. Card details are held only in the form's state and never sent in a request, so there is nothing to leak. A unique index stops a booking being charged twice |
+| Test-only features | The endpoint that reads the last email, and the code echoed in responses, exist only when `NODE_ENV=test` is set (the echoed code also needs `EXPOSE_TEST_CODES`). In production, sending an email without real mail settings fails instead of printing it, so a code can never end up in a production log |
+| Containers | Both images run as an unprivileged user, the final images hold no test tools or source, containers drop their Linux capabilities, and only the web port is published (§17) |
+| Pipeline | Every push runs lint, dependency audit, backend and frontend tests, Newman, CodeQL, SonarCloud and a Docker build with a smoke test (§15, §16, §17) |
+
+### 19.6 Problems found while building, and fixed
+
+These are real defects the review and the tests turned up, not hypothetical ones.
+
+| Problem | Effect | Fix |
+|---|---|---|
+| Text escaped twice in chat | Messages showed `&amp;amp;`, so the text was corrupted | One shared escape function used by both the REST and the socket path (§13) |
+| Admin search rejected typed text | `sanitizeFilter` rejected the `$in` lookups the code built itself, so searching returned an error | The server-built operators are marked `mongoose.trusted()` (§16) |
+| A half-finished login could be mistaken for a session | A two-factor token carries only an id, and the role is looked up by id, so it would have authenticated | The `stage` claim, refused in `authenticate.js` and in the socket handshake (§8) |
+| Query injection findings | CodeQL reported 11 places where user values reached a query | Wrapped in `$eq` (§16) |
+| Log injection findings | CodeQL reported 2 places | Line breaks removed from logged values (§16, §18) |
+| The refund did not lower a freelancer's income | The refunded payment still counted as earned and was taxed | The payment record is marked refunded when the admin refunds (§14) |
+| The audit chain's hash was blanked in the log | The logger redacts any field named like `hash`, which hid the anchor value | The field is logged as `fingerprint` (§8a) |
+
+### 19.7 What is still weak, and why it was left
+
+| Weakness | Risk | Why it was left, and what would fix it |
+|---|---|---|
+| A stolen login token keeps working until it expires (1 hour), even after the password is changed | Medium. Needs the token to be stolen first | JWTs are not revocable without a server-side record. A token version stored on the account and checked on every request would end old tokens when the password changes or when the person presses "sign out of all devices" |
+| The login token is in `sessionStorage` | Medium. A successful script injection could read it | An `HttpOnly` cookie would hide it from scripts but brings CSRF protection into scope. The strict CSP, escaping on input and no raw HTML make an injection hard; the token is cleared when the tab closes |
+| Account lockout can be used to lock someone else out for 15 minutes, and the locked message shows the account exists | Low | The lock is short, a password reset lifts it, and the alternative is unlimited guessing. A CAPTCHA after the third failure would remove the trade-off |
+| Rate limits are kept in the memory of one API process | Low. Correct for one instance, not shared between several | One Render instance is used. Several instances would need a shared store such as Redis |
+| The breach lookup depends on an outside service | Low | It fails open on purpose and logs the failure; the common-password list works offline |
+| Verification codes are printed to the console when no mail server is set | Low in development, not allowed in production | Needed so the project can be marked without a mailbox. In production the mailer refuses to fall back to the console and fails instead |
+| Deleting the newest audit entries is not visible from the database alone | Low | Each entry's number and fingerprint is also in Better Stack, which the database owner cannot edit |
+| `npm audit` reports 33 findings in the backend's test tools (Newman and its reporter, Jest, nodemon, c8) | Low. None ship in the Docker image or run in production | They are test and development dependencies. The audit that fails the pipeline covers only the packages that ship (0 findings). Upgrading Newman's tree would break the report format |
+| Payments are simulated and there is no real money movement | Not applicable here | Stated on the site and in §11; a real gateway would hold card data, not this application |
+| No web application firewall or intrusion detection in front of the app | Low for a student deployment | Out of scope; Better Stack alerts on the logged security events would be the first step |
+
+### 19.8 Mapping to the OWASP Top 10 (2021)
+
+| Category | Where it is handled |
+|---|---|
+| A01 Broken access control | 19.4: role checks on every route, tested by the access-control matrix; ownership scoping; audit trail |
+| A02 Cryptographic failures | bcrypt, HTTPS and HSTS, hashed one-time codes, secrets only in environment variables, no card data |
+| A03 Injection | 19.1: input sanitiser, validators, `sanitizeFilter`, `$eq`, escaped regular expressions; CodeQL clean |
+| A04 Insecure design | Escrow with explicit states, price read on the server, lockout, the staged login tokens, the audit trail |
+| A05 Security misconfiguration | Helmet and CSP, CORS allow-list, test-only features gated, containers run unprivileged, no stack traces |
+| A06 Vulnerable and outdated components | `npm audit` in the pipeline on production packages (0 findings); known test-tool findings listed in 19.7 |
+| A07 Identification and authentication failures | 19.3: lockout, password policy, two-factor, staged tokens, no user enumeration, sign-in history |
+| A08 Software and data integrity failures | Hash-chained audit trail; locked dependency files and `npm ci` in the pipeline |
+| A09 Security logging and monitoring failures | §18: structured events for every security-relevant action, shipped to Better Stack |
+| A10 Server-side request forgery | The server only calls addresses fixed in the code or the configuration (the breach lookup, Better Stack, the mail server); none is built from user input |
+
+**Conclusion.** No open weakness lets one user read or change another user's data, take over an account without its password, or run script or database commands through input. The weaknesses left (19.7) need a stolen token, a successful script injection, or a second server to matter, and each has a stated fix. The most worthwhile next step would be the token version, which removes the first and, together with the strict CSP, reduces the second.
+
+---
+
+## 20. Deploying on Render
+
+Render runs the app as one Docker web service built from the `Dockerfile` in the repository root. That image builds the React app and the API serves it, so the site and the API share one address and one port. The API reads the port from the `PORT` variable that Render sets, `USE_HTTPS` is `false` because Render's load balancer provides the HTTPS, and `TRUST_PROXY=1` makes rate limiting and logs see the real visitor address. The data is kept in MongoDB Atlas. The two Dockerfiles in `backend/` and `frontend/` with `docker-compose.yml` remain the way to run the app locally.
+
+1. In Render choose **New**, then **Web Service**, and connect this repository. Set the language to **Docker**, leave the Dockerfile path as `./Dockerfile`, and set the health check path to `/api/health`.
+2. In Atlas, under **Network Access**, allow access from anywhere (`0.0.0.0/0`), because Render's addresses change. The database user's password is what protects it.
+3. Add these environment variables in Render.
+
+| Variable | Value |
+|---|---|
+| `NODE_ENV` | `production` (the API refuses to start in production without the mail settings below) |
+| `MONGODB_URI` | the Atlas connection string, with the database name, for example `.../hustlehub?retryWrites=true&w=majority` |
+| `JWT_SECRET` | a long random value (40 characters or more) |
+| `CORS_ORIGIN` | the address Render gives the service, for example `https://hustlehub.onrender.com` |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM` | the mail account that sends verification and reset codes |
+| `ADMIN_NAME`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` | the first administrator, created by the seed script |
+| `BETTERSTACK_SOURCE_TOKEN`, `BETTERSTACK_INGEST_HOST` | optional: sends the logs to Better Stack (section 18) |
+
+4. After the first deploy, open the **Shell** tab of the service and run `node scripts/seedAdmin.js` once to create the administrator.
+
+The `SERVE_FRONTEND` and `FRONTEND_DIST` settings switch the hosting of the built app on and off. The pages get a Content-Security-Policy that only allows this origin, and API responses keep their own stricter one (`backend/src/utils/frontendHosting.js`, covered by `frontendHosting.test.js`). The pipeline builds this image on every push, in the Docker job.
+

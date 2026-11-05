@@ -10,7 +10,38 @@ vi.mock('../api/hustlehub');
 const mount = () => renderApp(<AccountSecurityPage />, { user: clientUser });
 
 describe('AccountSecurityPage', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    api.listSignIns.mockResolvedValue({ data: { signIns: [] } });
+  });
+
+  it('lists the recent sign-ins, newest first, with device, time, address and how they signed in', async () => {
+    api.twoFactorStatus.mockResolvedValue({ data: { twoFactorEnabled: false } });
+    api.listSignIns.mockResolvedValue({
+      data: {
+        signIns: [
+          { id: 'a', at: '2026-11-05T01:12:29.000Z', ip: '::1', userAgent: 'Mozilla/5.0 (Windows NT 10.0) Chrome/130.0 Safari/537.36', method: 'two_factor' },
+          { id: 'b', at: '2026-11-04T09:00:00.000Z', ip: '41.0.0.9', userAgent: 'Mozilla/5.0 (iPhone) Safari/604.1', method: 'password' },
+        ],
+      },
+    });
+    mount();
+    const list = await screen.findByRole('list', { name: 'Recent sign-ins' });
+    expect(list).toHaveTextContent('Chrome on Windows');
+    expect(list).toHaveTextContent('latest');
+    expect(list).toHaveTextContent('Password and email code');
+    expect(list).toHaveTextContent('Safari on iOS');
+    expect(list).toHaveTextContent('41.0.0.9');
+  });
+
+  it('says so when nothing has been recorded, and offers a retry when the list cannot load', async () => {
+    const user = userEvent.setup();
+    api.twoFactorStatus.mockResolvedValue({ data: { twoFactorEnabled: false } });
+    api.listSignIns.mockRejectedValueOnce(Object.assign(new Error('x'), { status: 0 })).mockResolvedValueOnce({ data: { signIns: [] } });
+    mount();
+    await user.click(await screen.findByRole('button', { name: /try again/i }));
+    expect(await screen.findByText('No sign-ins recorded yet.')).toBeInTheDocument();
+  });
 
   it('shows the off state and lets you start turning 2FA on', async () => {
     api.twoFactorStatus.mockResolvedValue({ data: { twoFactorEnabled: false } });

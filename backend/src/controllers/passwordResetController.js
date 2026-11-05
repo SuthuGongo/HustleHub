@@ -4,6 +4,7 @@ const AppError = require('../utils/AppError');
 const logger = require('../utils/logger');
 const { hashPassword, dummyCompare } = require('../utils/password');
 const { issueCode, checkCode } = require('../services/otpService');
+const { clearFailures } = require('../utils/accountLockout');
 
 // A single, constant wording used whether the email doesn't exist, the account is disabled, or the
 // code is simply wrong - so a person probing the endpoint learns nothing about which case occurred.
@@ -56,6 +57,7 @@ async function resetPassword(req, res, next) {
 
     user.passwordHash = await hashPassword(req.body.newPassword);
     await user.save();
+    await clearFailures(user); // proving control of the email address also lifts a lockout
     await TwoFactorCode.deleteMany({ user: user.id, purpose: 'reset_password' });
     logger.info('auth.password.reset', { userId: user.id, ip: req.ip, requestId: req.id });
 

@@ -7,6 +7,8 @@
     "dev": "nodemon src/server.js",
     "gen-cert": "node scripts/generateCert.js",
     "seed:admin": "node scripts/seedAdmin.js",
+    "demo:tamper-audit": "node scripts/tamperAuditDemo.js",
+    "security:probe": "node scripts/securityProbe.js",
     "test:api": "node scripts/runNewman.js",
     "test:api:coverage": "node scripts/runNewman.js --coverage",
     "test:unit": "jest",

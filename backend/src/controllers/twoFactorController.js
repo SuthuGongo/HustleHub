@@ -4,6 +4,7 @@ const User = require('../models/User');
 const TwoFactorCode = require('../models/TwoFactorCode');
 const AppError = require('../utils/AppError');
 const logger = require('../utils/logger');
+const { recordSignIn } = require('../utils/signInHistory');
 const { comparePassword } = require('../utils/password');
 const { signToken, verifyPendingToken } = require('../utils/token');
 const { RESEND_COOLDOWN_MS, generateBackupCodes, hashBackupCode } = require('../utils/twoFactor');
@@ -108,6 +109,7 @@ async function verifyLogin(req, res, next) {
     }
 
     const token = signToken(user);
+    await recordSignIn(user, req, 'two_factor');
     logger.info('auth.login.success', { userId: user.id, role: user.role, method: 'two_factor', ip: req.ip, requestId: req.id });
     res.status(200).json({ success: true, message: 'Login successful.', data: { user: user.toJSON(), token } });
   } catch (err) {

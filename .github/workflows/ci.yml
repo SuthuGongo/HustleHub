@@ -189,6 +189,7 @@ jobs:
           {
             echo "JWT_SECRET=$(openssl rand -hex 32)"
             echo "MONGO_PASSWORD=$(openssl rand -hex 16)"
+            echo "PASSWORD_BREACH_CHECK=false"
           } > .env
 
       - name: Validate the compose file
@@ -196,6 +197,9 @@ jobs:
 
       - name: Build the backend and frontend images
         run: docker compose build
+
+      - name: Build the single-container image used for Render
+        run: docker build -t hustlehub-single .
 
       - name: Start the stack and wait until every container is healthy
         run: docker compose up -d --wait --wait-timeout 240

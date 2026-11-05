@@ -21,6 +21,7 @@ const TABS = [
   { id: 'transactions', label: 'Transactions' },
   { id: 'escrow', label: 'Active bookings' },
   { id: 'disputes', label: 'Disputes' },
+  { id: 'audit', label: 'Audit trail' },
   { id: 'messages', label: 'Messages' },
 ];
 
@@ -452,6 +453,90 @@ const STATUS_TONE = { new: 'good', read: 'neutral', resolved: 'muted' };
 // The address goes through encodeURIComponent so odd characters in it can never add extra mail headers.
 const replyLink = (m) => `mailto:${encodeURIComponent(m.email).replace(/%40/g, '@')}?subject=${encodeURIComponent(`Re: HustleHub+ ${m.reference}`)}`;
 
+const AUDIT_LABELS = {
+  'booking.paid': 'Payment held in escrow',
+  'booking.completed': 'Work marked complete',
+  'funds.released': 'Funds released',
+  'funds.refunded': 'Funds refunded',
+  'dispute.raised': 'Dispute raised',
+};
+
+// The tamper-evident record of every money event. "Verify integrity" recomputes the whole chain of hashes.
+function AuditTrail() {
+  const { data, loading, error, errorStatus, reload } = useAsync(() => api.adminAudit());
+  const [check, setCheck] = useState(null); // { ok, checked, brokenAtSeq, reason } once run
+  const [checking, setChecking] = useState(false);
+  const [checkError, setCheckError] = useState('');
+  const entries = data?.entries ?? [];
+
+  const verify = async () => {
+    setChecking(true);
+    setCheckError('');
+    try {
+      const result = await api.adminVerifyAudit();
+      setCheck(result.data);
+    } catch (err) {
+      setCheckError(err.message);
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  return (
+    <>
+      <p className="muted">
+        Every payment, completion, release, refund and dispute is added to a chain. Each entry stores a fingerprint (hash) of the one before it, so changing or deleting a record
+        afterwards breaks the chain.
+      </p>
+      <div className="form-actions">
+        <button type="button" className="btn btn-primary" onClick={verify} disabled={checking}>
+          {checking ? 'Checking…' : 'Verify integrity'}
+        </button>
+      </div>
+      <Alert>{checkError}</Alert>
+      {check && check.ok && (
+        <Alert kind="success">
+          Chain intact. {pluralise(check.checked, 'entry', 'entries')} checked and every hash matches.
+        </Alert>
+      )}
+      {check && !check.ok && (
+        <Alert>
+          Chain broken at entry {check.brokenAtSeq}: {check.reason}. {check.checked} earlier {check.checked === 1 ? 'entry is' : 'entries are'} still intact.
+        </Alert>
+      )}
+      <DataState
+        loading={loading && !data}
+        error={error}
+        errorStatus={errorStatus}
+        onRetry={reload}
+        empty={!loading && entries.length === 0}
+        emptyTitle="Nothing recorded yet"
+        emptyText="Money events are recorded here as bookings are paid, completed, released and settled."
+      >
+        <ul className="rows" aria-label="Audit trail entries">
+          {entries.map((e) => (
+            <li key={e.seq} className="row">
+              <div className="row-main">
+                <h3>
+                  #{e.seq} {AUDIT_LABELS[e.event] ?? e.event}
+                </h3>
+                <p className="muted">
+                  {new Date(e.at).toLocaleString('en-ZA', { dateStyle: 'medium', timeStyle: 'short' })}
+                  {e.note ? ` · ${e.note}` : ''}
+                </p>
+                <p className="muted small mono" title={e.hash}>
+                  hash {e.hash.slice(0, 12)}… follows {e.prevHash.slice(0, 12)}…
+                </p>
+              </div>
+              {e.amount !== null && <strong className="amount">{formatRand(e.amount)}</strong>}
+            </li>
+          ))}
+        </ul>
+      </DataState>
+    </>
+  );
+}
+
 function ReplyThread({ replies }) {
   if (!replies || replies.length === 0) return null;
   return (
@@ -651,7 +736,7 @@ function Messages() {
   );
 }
 
-const PANELS = { overview: Overview, users: Users, gigs: Gigs, transactions: Transactions, escrow: Escrow, disputes: Disputes, messages: Messages };
+const PANELS = { overview: Overview, users: Users, gigs: Gigs, transactions: Transactions, escrow: Escrow, disputes: Disputes, audit: AuditTrail, messages: Messages };
 
 export default function AdminPage() {
   useTitle('Administration');

@@ -1,5 +1,6 @@
 const { body, param, query } = require('express-validator');
 const { GIG_CATEGORIES, CONTACT_TOPICS, MESSAGE_STATUSES } = require('../utils/constants');
+const { checkPassword } = require('../utils/passwordPolicy');
 
 // ---------- helpers ----------
 const idParam = (name = 'id') =>
@@ -153,7 +154,13 @@ const NEW_PASSWORD_RULE = body('newPassword')
   .matches(/\d/)
   .withMessage('Password must contain at least one number.')
   .matches(/[A-Z]/)
-  .withMessage('Password must contain at least one uppercase letter.');
+  .withMessage('Password must contain at least one uppercase letter.')
+  .bail()
+  .custom(async (value, { req }) => {
+    const problem = await checkPassword(value, { email: req.body.email });
+    if (problem) throw new Error(problem);
+    return true;
+  });
 
 const forgotPasswordRules = [
   body('email').isString().withMessage('Email must be text.').bail().trim().isEmail().withMessage('Enter a valid email address.').normalizeEmail(),

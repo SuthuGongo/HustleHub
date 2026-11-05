@@ -8,10 +8,12 @@ jest.mock('../../models/Gig');
 jest.mock('../../models/ContactMessage');
 jest.mock('../../utils/mailer', () => ({ sendMail: jest.fn() }));
 jest.mock('../../services/socketService', () => ({ emitToUser: jest.fn() }));
+jest.mock('../../services/auditTrail', () => ({ append: jest.fn().mockResolvedValue({}) }));
 
 const mongoose = require('mongoose');
 const Booking = require('../../models/Booking');
 const Transaction = require('../../models/Transaction');
+const audit = require('../../services/auditTrail');
 const { resolveDispute } = require('../adminController');
 const { getIncomeSummary } = require('../transactionController');
 
@@ -55,6 +57,8 @@ describe('resolveDispute', () => {
     expect(filter).toEqual({ booking: booking._id });
     expect(update.$set.status).toBe('refunded');
     expect(update.$set.refundedAt).toBeInstanceOf(Date);
+    // The refund is also written to the tamper-evident audit trail, with the admin who settled it.
+    expect(audit.append).toHaveBeenCalledWith('funds.refunded', expect.objectContaining({ bookingId: 'booking-1', actorId: 'admin-1' }));
   });
 
   test('releasing the funds to the freelancer leaves the payment record alone', async () => {
@@ -65,6 +69,7 @@ describe('resolveDispute', () => {
     await resolveDispute({ params: { id: 'booking-1' }, body: { resolution: 'released' }, user: { id: 'admin-1' } }, res, jest.fn());
 
     expect(Transaction.updateOne).not.toHaveBeenCalled();
+    expect(audit.append).toHaveBeenCalledWith('funds.released', expect.objectContaining({ actorId: 'admin-1' }));
   });
 });
 

@@ -1,6 +1,7 @@
 const User = require('../models/User');
 const AppError = require('../utils/AppError');
 const logger = require('../utils/logger');
+const { recordSignIn } = require('../utils/signInHistory');
 const { signToken, signPendingToken, verifyPendingToken } = require('../utils/token');
 const { RESEND_COOLDOWN_MS } = require('../utils/twoFactor');
 const TwoFactorCode = require('../models/TwoFactorCode');
@@ -42,6 +43,7 @@ async function verifyEmail(req, res, next) {
     // immediately, since the person has now proven both their password AND their email in one sitting.
     // (If 2FA also happens to be on for this account, that check still runs on their next login.)
     const token = signToken(user);
+    await recordSignIn(user, req, 'email_verification');
     logger.info('auth.login.success', { userId: user.id, role: user.role, method: 'email_verification', ip: req.ip, requestId: req.id });
     res.status(200).json({ success: true, message: 'Email verified.', data: { user: user.toJSON(), token } });
   } catch (err) {

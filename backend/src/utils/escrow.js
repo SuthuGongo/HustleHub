@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const Booking = require('../models/Booking');
+const audit = require('../services/auditTrail');
 
 // How long a client has to review completed work before funds auto-release to the freelancer.
 // Configurable via .env so a real 3-day window can be shrunk to a few minutes for demos and
@@ -16,14 +17,19 @@ function reviewDeadlineFrom(from = new Date()) {
 // correct by the time anyone actually looks - which is all "the funds released while I wasn't
 // looking" needs to mean here.
 async function releaseExpiredEscrows() {
+  // $lte is an operator we built ourselves, not from user input - see gigController.js for the same
+  // pattern. Without mongoose.trusted(), the global sanitizeFilter setting (config/db.js) re-wraps it in
+  // `{ $eq: { $lte: ... } }` to guard against injected filters, which then fails to cast against the Date type.
+  const due = { escrowStatus: 'awaiting_review', reviewDeadline: mongoose.trusted({ $lte: new Date() }) };
+  const expired = await Booking.find(due).select('price').lean(); // remembered so each release can go in the audit trail
+  if (!expired.length) return;
   await Booking.updateMany(
-    // $lte is an operator we built ourselves, not from user input - see gigController.js for the
-    // same pattern. Without mongoose.trusted(), the global sanitizeFilter setting (config/db.js)
-    // re-wraps this in `{ $eq: { $lte: ... } }` to guard against injected filters, which then fails
-    // to cast against the Date schema type.
-    { escrowStatus: 'awaiting_review', reviewDeadline: mongoose.trusted({ $lte: new Date() }) },
+    { _id: mongoose.trusted({ $in: expired.map((b) => b._id) }), escrowStatus: 'awaiting_review' },
     { $set: { escrowStatus: 'released', resolvedAt: new Date() } }
   );
+  for (const b of expired) {
+    await audit.append('funds.released', { bookingId: b._id, amount: b.price, note: 'review window expired, released automatically' });
+  }
 }
 
 module.exports = { REVIEW_WINDOW_HOURS, reviewDeadlineFrom, releaseExpiredEscrows };

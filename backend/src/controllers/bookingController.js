@@ -7,6 +7,7 @@ const { reviewDeadlineFrom, releaseExpiredEscrows } = require('../utils/escrow')
 const { findOrCreateConversation, postPreparedMessage } = require('../services/chatService');
 const AppError = require('../utils/AppError');
 const logger = require('../utils/logger');
+const audit = require('../services/auditTrail');
 const { ROLES } = require('../utils/constants');
 
 // Which bookings may this user list? Clients see what they booked, freelancers what
@@ -64,6 +65,7 @@ async function createBooking(req, res, next) {
 
     logger.info('booking.created', { bookingId: booking.id, gigId: gig.id, clientId: req.user.id, freelancerId: gig.freelancer, amount: gig.price, requestId: req.id });
     logger.info('transaction.recorded', { transactionId: transaction.id, bookingId: booking.id, amount: transaction.amount, status: transaction.status, requestId: req.id });
+    await audit.append('booking.paid', { bookingId: booking.id, actorId: req.user.id, amount: transaction.amount, note: 'held in escrow' });
 
     res.status(201).json({
       success: true,
@@ -123,6 +125,7 @@ async function completeBooking(req, res, next) {
     booking.reviewDeadline = reviewDeadlineFrom(now);
     await booking.save();
     logger.info('booking.completed', { bookingId: booking.id, freelancerId: req.user.id, reviewDeadline: booking.reviewDeadline, requestId: req.id });
+    await audit.append('booking.completed', { bookingId: booking.id, actorId: req.user.id, amount: booking.price, note: 'review window started' });
     res.status(200).json({ success: true, message: 'Booking marked as completed. The client now has a review window before funds release.', data: { booking } });
   } catch (err) {
     next(err);
@@ -144,6 +147,7 @@ async function releaseEscrow(req, res, next) {
     booking.resolvedAt = new Date();
     await booking.save();
     logger.info('booking.funds_released', { bookingId: booking.id, clientId: req.user.id, freelancerId: booking.freelancer, amount: booking.price, requestId: req.id });
+    await audit.append('funds.released', { bookingId: booking.id, actorId: req.user.id, amount: booking.price, note: 'released by the client' });
     res.status(200).json({ success: true, message: 'Funds released to the freelancer.', data: { booking } });
   } catch (err) {
     next(err);
@@ -170,6 +174,7 @@ async function disputeEscrow(req, res, next) {
     booking.disputeReason = req.body.reason;
     await booking.save();
     logger.warn('booking.disputed', { bookingId: booking.id, clientId: req.user.id, freelancerId: booking.freelancer, amount: booking.price, requestId: req.id });
+    await audit.append('dispute.raised', { bookingId: booking.id, actorId: req.user.id, amount: booking.price, note: 'funds frozen' });
 
     try {
       const conversation = await findOrCreateConversation({

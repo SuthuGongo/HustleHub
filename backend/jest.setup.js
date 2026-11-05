@@ -4,4 +4,5 @@ process.env.JWT_SECRET = process.env.JWT_SECRET || 'unit-test-secret-not-used-an
 process.env.MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/unit_test_never_connected';
 process.env.NODE_ENV = 'test';
 // Keep the test output readable; the logger's own tests build their own logger and capture what it writes.
+process.env.PASSWORD_BREACH_CHECK = 'false';
 process.env.LOG_LEVEL = 'silent';

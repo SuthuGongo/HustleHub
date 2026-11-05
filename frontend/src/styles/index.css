@@ -961,6 +961,10 @@ a:hover { color: var(--text); }
    ========================================================================== */
 .security-panel { max-width: 560px; padding: 1.75rem; }
 .security-panel p { margin: 0 0 1rem; }
+.signin-list { list-style: none; margin: 0; padding: 0; }
+.signin-list li { display: flex; flex-direction: column; gap: 0.15rem; padding: 0.7rem 0; border-top: 1px solid var(--border, #e4ded0); }
+.signin-list li:first-child { border-top: 0; }
+.signin-latest { font-size: 0.75rem; font-weight: 700; color: var(--accent, #1f6a4f); margin-left: 0.4rem; text-transform: uppercase; letter-spacing: 0.05em; }
 
 /* ==========================================================================
    Admin overview dashboard
@@ -1077,3 +1081,4 @@ a:hover { color: var(--text); }
 .bracket-table th, .bracket-table td { text-align: left; padding: 0.5rem 0.6rem; border-bottom: 1px solid var(--glass-border); }
 .bracket-table th { color: var(--text-muted); font-weight: 600; }
 .bracket-table tr[aria-current='true'] td { background: var(--hover); font-weight: 700; color: var(--accent); }
+.mono { font-family: Consolas, Menlo, 'DejaVu Sans Mono', monospace; }

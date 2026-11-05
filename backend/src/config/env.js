@@ -47,6 +47,9 @@ module.exports = {
     betterStackToken: process.env.BETTERSTACK_SOURCE_TOKEN || '',
     betterStackHost: process.env.BETTERSTACK_INGEST_HOST || '',
   },
+  // One-container hosting: the API also serves the built React app from this folder (see utils/frontendHosting.js).
+  serveFrontend: (process.env.SERVE_FRONTEND || 'false').toLowerCase() === 'true',
+  frontendDist: process.env.FRONTEND_DIST || 'public',
   isProduction: (process.env.NODE_ENV || 'development') === 'production',
   mongodbUri: process.env.MONGODB_URI,
   twoFactorTokenExpiresIn: process.env.TWO_FACTOR_TOKEN_EXPIRES_IN || '10m', // how long a "verify your code" session stays open
@@ -60,6 +63,14 @@ module.exports = {
     user: process.env.SMTP_USER || '',
     pass: process.env.SMTP_PASS || '',
     from: process.env.MAIL_FROM || 'HustleHub+ <no-reply@hustlehub.local>',
+  },
+  // Account protection beyond the per-IP rate limits (see utils/accountLockout.js and utils/passwordPolicy.js).
+  security: {
+    lockoutMaxAttempts: positiveInt(process.env.LOCKOUT_MAX_ATTEMPTS, 5),
+    lockoutMinutes: positiveInt(process.env.LOCKOUT_MINUTES, 15),
+    // Ask the Pwned Passwords range service whether a new password has appeared in a known data breach.
+    // On by default; the test runs switch it off so they never depend on an outside service.
+    breachCheck: (process.env.PASSWORD_BREACH_CHECK || 'true').toLowerCase() !== 'false',
   },
   rateLimit: {
     windowMinutes: positiveInt(process.env.RATE_LIMIT_WINDOW_MINUTES, 15),

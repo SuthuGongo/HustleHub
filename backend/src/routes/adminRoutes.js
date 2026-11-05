@@ -31,6 +31,8 @@ router.get('/transactions', adminTransactionQueryRules, handleValidationErrors, 
 router.get('/escrow', admin.listEscrow);
 router.get('/disputes', admin.listDisputes);
 router.post('/disputes/:id/resolve', idParam(), disputeResolveRules, handleValidationErrors, admin.resolveDispute);
+router.get('/audit', admin.listAudit);
+router.get('/audit/verify', admin.verifyAudit);
 router.get('/messages', adminMessageQueryRules, handleValidationErrors, admin.listMessages);
 router.patch('/messages/:id/status', idParam(), messageStatusRules, handleValidationErrors, admin.setMessageStatus);
 router.post('/messages/:id/reply', idParam(), messageReplyRules, handleValidationErrors, admin.replyToMessage);

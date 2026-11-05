@@ -4,6 +4,7 @@ import Alert from '../components/Alert';
 import CodeStep from '../components/CodeStep';
 import DataState from '../components/DataState';
 import { TextField } from '../components/Fields';
+import { describeDevice } from '../utils/format';
 import { useAsync } from '../utils/useAsync';
 import { useTitle } from '../utils/useTitle';
 
@@ -148,9 +149,38 @@ function DisableFlow({ onDisabled }) {
   );
 }
 
+const METHOD_LABELS = { password: 'Password', email_verification: 'Email verification', two_factor: 'Password and email code' };
+
+function formatWhen(iso) {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleString('en-ZA', { dateStyle: 'medium', timeStyle: 'short' });
+}
+
+// The person's own recent sign-ins, so one that was not them can be spotted.
+function SignInList({ signIns }) {
+  if (!signIns.length) return <p className="muted">No sign-ins recorded yet.</p>;
+  return (
+    <>
+      <p className="muted">If you do not recognise one of these, change your password and turn on two-factor authentication.</p>
+      <ul className="signin-list" aria-label="Recent sign-ins">
+        {signIns.map((s, i) => (
+          <li key={s.id}>
+            <strong>{describeDevice(s.userAgent)}</strong>
+            {i === 0 && <span className="signin-latest"> latest</span>}
+            <span className="muted">
+              {formatWhen(s.at)} · {s.ip || 'unknown address'} · {METHOD_LABELS[s.method] || s.method}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </>
+  );
+}
+
 export default function AccountSecurityPage() {
   useTitle('Security settings');
   const { data, loading, error, errorStatus, reload } = useAsync(() => api.twoFactorStatus());
+  const signIns = useAsync(() => api.listSignIns());
 
   return (
     <>
@@ -163,6 +193,13 @@ export default function AccountSecurityPage() {
         <h2 id="twofa-title">Two-factor authentication</h2>
         <DataState loading={loading} error={error} errorStatus={errorStatus} onRetry={reload}>
           {data && (data.twoFactorEnabled ? <DisableFlow onDisabled={reload} /> : <EnableFlow onEnabled={reload} />)}
+        </DataState>
+      </section>
+
+      <section className="panel security-panel" aria-labelledby="signins-title">
+        <h2 id="signins-title">Recent sign-ins</h2>
+        <DataState loading={signIns.loading} error={signIns.error} errorStatus={signIns.errorStatus} onRetry={signIns.reload}>
+          {signIns.data && <SignInList signIns={signIns.data.signIns} />}
         </DataState>
       </section>
     </>

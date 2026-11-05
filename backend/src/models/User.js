@@ -12,6 +12,9 @@ const userSchema = new mongoose.Schema(
     isActive: { type: Boolean, default: true },
     // A new account starts unverified; login is blocked until the emailed code is confirmed.
     emailVerified: { type: Boolean, default: false },
+    // ---- account lockout (utils/accountLockout.js) ----
+    failedLoginCount: { type: Number, default: 0, select: false },
+    lockUntil: { type: Date, default: null, select: false },
     // ---- two-factor authentication (email OTP) ----
     twoFactorEnabled: { type: Boolean, default: false },
     // One-time backup codes, each hashed (never stored in the clear), each usable once.

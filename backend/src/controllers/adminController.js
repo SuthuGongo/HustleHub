@@ -7,6 +7,7 @@ const Transaction = require('../models/Transaction');
 const ContactMessage = require('../models/ContactMessage');
 const AppError = require('../utils/AppError');
 const logger = require('../utils/logger');
+const audit = require('../services/auditTrail');
 const { sendMail } = require('../utils/mailer');
 const { replyEmailHtml } = require('../utils/emailTemplates');
 const { emitToUser } = require('../services/socketService');
@@ -164,6 +165,7 @@ async function resolveDispute(req, res, next) {
       await Transaction.updateOne({ booking: booking._id }, { $set: { status: 'refunded', refundedAt: booking.resolvedAt } });
     }
     logger.info(resolution === 'refunded' ? 'transaction.refunded' : 'booking.dispute_released', { bookingId: booking.id, adminId: req.user.id, clientId: booking.client, freelancerId: booking.freelancer, amount: booking.price, requestId: req.id });
+    await audit.append(resolution === 'refunded' ? 'funds.refunded' : 'funds.released', { bookingId: booking.id, actorId: req.user.id, amount: booking.price, note: resolution === 'refunded' ? 'dispute settled for the client' : 'dispute settled for the freelancer' });
     const populated = await withPeople(Booking.findById(booking.id));
     res.status(200).json({
       success: true,
@@ -442,7 +444,29 @@ async function downloadReport(req, res, next) {
   }
 }
 
+// GET /api/admin/audit - the newest entries of the money-event chain.
+async function listAudit(req, res, next) {
+  try {
+    res.status(200).json({ success: true, data: { entries: await audit.listRecent(50) } });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// GET /api/admin/audit/verify - recomputes every hash and reports whether the chain is intact.
+async function verifyAudit(req, res, next) {
+  try {
+    const result = await audit.verifyChain();
+    logger[result.ok ? 'info' : 'error']('audit.verified', { ok: result.ok, checked: result.checked, brokenAtSeq: result.brokenAtSeq, adminId: req.user.id, requestId: req.id });
+    res.status(200).json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
+  listAudit,
+  verifyAudit,
   listUsers,
   setUserStatus,
   listAllGigs,

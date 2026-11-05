@@ -2013,6 +2013,585 @@
       ]
     },
     {
+      "name": "02c - Account lockout, password policy and sign-ins",
+      "item": [
+        {
+          "name": "Register - a very common password is refused (Password1)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/auth/register",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Common Pass\",\n  \"email\": \"common.{{runId}}@example.com\",\n  \"password\": \"Password1\",\n  \"role\": \"client\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 422\", function () { pm.response.to.have.status(422); });",
+                  "const json = pm.response.json();",
+                  "pm.test(\"Says the password is too common\", function () { pm.expect(json.message).to.include(\"too common\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Register - a password containing the person's name is refused",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/auth/register",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Zanele Mokoena\",\n  \"email\": \"zanele.{{runId}}@example.com\",\n  \"password\": \"Zanele2025!x\",\n  \"role\": \"client\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 422\", function () { pm.response.to.have.status(422); });",
+                  "const json = pm.response.json();",
+                  "pm.test(\"Says the password must not contain the name or email\", function () { pm.expect(json.message).to.include(\"must not contain your name or email\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Register - the lockout test account",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/auth/register",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Lockout Person\",\n  \"email\": \"lockout.{{runId}}@example.com\",\n  \"password\": \"Passw0rd!Test\",\n  \"role\": \"client\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 201\", function () { pm.response.to.have.status(201); });",
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set(\"lockVerifyToken\", json.data.verifyToken);",
+                  "pm.collectionVariables.set(\"lockDevCode\", json.data.devCode);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Verify the lockout test account",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/auth/verify-email",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"verifyToken\": \"{{lockVerifyToken}}\",\n  \"code\": \"{{lockDevCode}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Lockout - wrong password, attempt 1 of 5 (still a generic 401)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"lockout.{{runId}}@example.com\",\n  \"password\": \"WrongPassword1\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 401\", function () { pm.response.to.have.status(401); });",
+                  "pm.test(\"Generic message, nothing about locking yet\", function () { pm.expect(pm.response.json().message).to.eql(\"Invalid email or password.\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Lockout - wrong password, attempt 2 of 5 (still a generic 401)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"lockout.{{runId}}@example.com\",\n  \"password\": \"WrongPassword1\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 401\", function () { pm.response.to.have.status(401); });",
+                  "pm.test(\"Generic message, nothing about locking yet\", function () { pm.expect(pm.response.json().message).to.eql(\"Invalid email or password.\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Lockout - wrong password, attempt 3 of 5 (still a generic 401)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"lockout.{{runId}}@example.com\",\n  \"password\": \"WrongPassword1\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 401\", function () { pm.response.to.have.status(401); });",
+                  "pm.test(\"Generic message, nothing about locking yet\", function () { pm.expect(pm.response.json().message).to.eql(\"Invalid email or password.\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Lockout - wrong password, attempt 4 of 5 (still a generic 401)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"lockout.{{runId}}@example.com\",\n  \"password\": \"WrongPassword1\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 401\", function () { pm.response.to.have.status(401); });",
+                  "pm.test(\"Generic message, nothing about locking yet\", function () { pm.expect(pm.response.json().message).to.eql(\"Invalid email or password.\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Lockout - the 5th wrong password locks the account (423)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"lockout.{{runId}}@example.com\",\n  \"password\": \"WrongPassword1\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 423\", function () { pm.response.to.have.status(423); });",
+                  "pm.test(\"Tells the person the account is locked\", function () { pm.expect(pm.response.json().message).to.include(\"locked\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "SECURITY: while locked, even the CORRECT password is refused (423)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"lockout.{{runId}}@example.com\",\n  \"password\": \"Passw0rd!Test\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 423\", function () { pm.response.to.have.status(423); });",
+                  "const json = pm.response.json();",
+                  "pm.test(\"No token is issued\", function () { pm.expect(json.data).to.be.undefined; });",
+                  "pm.test(\"Says how long to wait\", function () { pm.expect(json.message).to.include(\"minute\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Unlock - forgot password for the locked account",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/auth/forgot-password",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"lockout.{{runId}}@example.com\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Unlock - read the reset code from the test-mode inbox",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/_test/last-email?to=lockout.{{runId}}@example.com"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", function () { pm.response.to.have.status(200); });",
+                  "const m = pm.response.json().data.text.match(/code is (\\d{6})/);",
+                  "pm.test(\"Code extracted\", function () { pm.expect(m).to.not.be.null; });",
+                  "pm.collectionVariables.set(\"lockResetCode\", m[1]);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reset - a common password is refused here too (invalid)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/auth/reset-password",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"lockout.{{runId}}@example.com\",\n  \"code\": \"{{lockResetCode}}\",\n  \"newPassword\": \"Welcome123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 422\", function () { pm.response.to.have.status(422); });",
+                  "pm.test(\"Same password policy as registration\", function () { pm.expect(pm.response.json().message).to.include(\"too common\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Unlock - resetting the password lifts the lock",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/auth/reset-password",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"lockout.{{runId}}@example.com\",\n  \"code\": \"{{lockResetCode}}\",\n  \"newPassword\": \"Unl0cked!Again77\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Unlock - the new password now logs in (valid)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"lockout.{{runId}}@example.com\",\n  \"password\": \"Unl0cked!Again77\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"A real session token is issued\", function () { pm.expect(pm.response.json().data.token).to.be.a(\"string\"); });",
+                  "pm.collectionVariables.set(\"lockToken\", pm.response.json().data.token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Sign-ins - the list needs a token (invalid)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/users/me/sign-ins"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 401\", function () { pm.response.to.have.status(401); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Sign-ins - the account owner sees the sign-in just made",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{lockToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/users/me/sign-ins"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", function () { pm.response.to.have.status(200); });",
+                  "const list = pm.response.json().data.signIns;",
+                  "pm.test(\"At least one sign-in is listed, newest first\", function () { pm.expect(list.length).to.be.above(0); });",
+                  "pm.test(\"It records the method and address but nothing secret\", function () { pm.expect(list[0].method).to.eql(\"password\"); pm.expect(list[0].ip).to.be.a(\"string\"); pm.expect(JSON.stringify(list)).to.not.match(/password\":|token|hash/i); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Sign-ins - another user only ever sees their own list",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{c1Token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/users/me/sign-ins"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", function () { pm.response.to.have.status(200); });",
+                  "const list = pm.response.json().data.signIns;",
+                  "pm.test(\"A different account has no sign-in from the lockout account\", function () { pm.expect(list.every(function (s) { return s.method; })).to.be.true; });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
       "name": "03 - JWT protection",
       "description": "Protected routes validate the token on every request.",
       "item": [
@@ -10062,6 +10641,138 @@
                   "pm.test(\"Status is 200\", function () { pm.response.to.have.status(200); });",
                   "const json = pm.response.json();",
                   "pm.test(\"Two messages, oldest first\", function () { pm.expect(json.data.messages).to.have.lengthOf(2); pm.expect(json.data.messages[0].text).to.include(\"there\"); pm.expect(json.data.messages[1].text).to.include(\"Monday\"); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "07c - Tamper-evident audit trail",
+      "item": [
+        {
+          "name": "Audit - a client cannot read the trail (403)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{c1Token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/admin/audit"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 403\", function () { pm.response.to.have.status(403); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Audit - a client cannot run the integrity check (403)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{c1Token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/admin/audit/verify"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 403\", function () { pm.response.to.have.status(403); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Audit - no token (401)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{nonexistentToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/admin/audit"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 401\", function () { pm.response.to.have.status(401); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Audit - the admin sees the money events recorded so far",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/admin/audit"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", function () { pm.response.to.have.status(200); });",
+                  "const entries = pm.response.json().data.entries;",
+                  "pm.test(\"Entries are listed, newest first\", function () { pm.expect(entries.length).to.be.above(3); pm.expect(entries[0].seq).to.be.above(entries[1].seq); });",
+                  "pm.test(\"Payments, completions and releases are recorded\", function () { const kinds = entries.map(function (e) { return e.event; }); pm.expect(kinds).to.include(\"booking.paid\"); pm.expect(kinds).to.include(\"booking.completed\"); });",
+                  "pm.test(\"Each entry is linked to the one before it\", function () { pm.expect(entries[0].prevHash).to.eql(entries[1].hash); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Audit - the chain verifies as intact",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/admin/audit/verify"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", function () { pm.response.to.have.status(200); });",
+                  "const r = pm.response.json().data;",
+                  "pm.test(\"Chain is intact\", function () { pm.expect(r.ok).to.be.true; });",
+                  "pm.test(\"Every entry was checked and a head hash is reported\", function () { pm.expect(r.checked).to.be.above(3); pm.expect(r.headHash).to.match(/^[0-9a-f]{64}$/); });"
                 ]
               }
             }

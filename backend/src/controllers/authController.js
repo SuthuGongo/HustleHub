@@ -7,6 +7,9 @@ const { startVerification } = require('./emailVerificationController');
 const { issueCode } = require('../services/otpService');
 const logger = require('../utils/logger');
 const { maskEmail } = logger;
+const { security } = require('../config/env');
+const { recordSignIn, listRecentSignIns } = require('../utils/signInHistory');
+const { isLocked, minutesLeft, registerFailure, clearFailures } = require('../utils/accountLockout');
 
 async function register(req, res, next) {
   try {
@@ -47,7 +50,7 @@ async function login(req, res, next) {
   try {
     const { email, password } = req.body;
 
-    const user = await User.findOne({ email: { $eq: String(email) } }).select('+passwordHash');
+    const user = await User.findOne({ email: { $eq: String(email) } }).select('+passwordHash +lockUntil');
 
     const genericAuthError = () => new AppError('Invalid email or password.', 401);
 
@@ -62,11 +65,22 @@ async function login(req, res, next) {
       return next(genericAuthError());
     }
 
+    // A locked account refuses every attempt, including the right password, until the lock runs out.
+    if (isLocked(user)) {
+      failed('account_locked', user.id);
+      return next(new AppError(`Too many failed sign-in attempts. Try again in ${minutesLeft(user)} minute(s), or reset your password.`, 423));
+    }
+
     const passwordMatches = await comparePassword(password, user.passwordHash);
     if (!passwordMatches) {
       failed('wrong_password', user.id);
+      const nowLocked = await registerFailure(user, { ip: req.ip, requestId: req.id });
+      if (nowLocked) {
+        return next(new AppError(`Too many failed sign-in attempts. This account is locked for ${security.lockoutMinutes} minutes.`, 423));
+      }
       return next(genericAuthError());
     }
+    await clearFailures(user);
 
     if (!user.isActive) {
       failed('account_disabled', user.id);
@@ -98,6 +112,7 @@ async function login(req, res, next) {
     }
 
     const token = signToken(user);
+    await recordSignIn(user, req, 'password');
     logger.info('auth.login.success', { userId: user.id, role: user.role, method: 'password', ip: req.ip, requestId: req.id });
 
     res.status(200).json({
@@ -122,4 +137,13 @@ async function getCurrentUser(req, res, next) {
   }
 }
 
-module.exports = { register, login, getCurrentUser };
+// GET /api/users/me/sign-ins - the caller's own recent sign-ins (never anyone else's: the id comes from the token).
+async function getMySignIns(req, res, next) {
+  try {
+    res.status(200).json({ success: true, data: { signIns: await listRecentSignIns(req.user.id) } });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { register, login, getCurrentUser, getMySignIns };

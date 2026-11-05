@@ -1,6 +1,7 @@
 const { body, validationResult } = require('express-validator');
 const AppError = require('../utils/AppError');
 const { REGISTRABLE_ROLES } = require('../utils/constants');
+const { checkPassword } = require('../utils/passwordPolicy');
 
 const registerRules = [
   body('name')
@@ -25,7 +26,13 @@ const registerRules = [
     .matches(/\d/)
     .withMessage('Password must contain at least one number.')
     .matches(/[A-Z]/)
-    .withMessage('Password must contain at least one uppercase letter.'),
+    .withMessage('Password must contain at least one uppercase letter.')
+    .bail()
+    .custom(async (value, { req }) => {
+      const problem = await checkPassword(value, { email: req.body.email, name: req.body.name });
+      if (problem) throw new Error(problem);
+      return true;
+    }),
   // Only freelancer/client may self-register. "admin" is rejected here on purpose (privilege escalation).
   body('role')
     .trim()
