@@ -4,6 +4,7 @@
     "description": "Covers authentication, RBAC (client / freelancer / admin), public browsing, gig ownership, bookings, simulated-payment transactions, reviews and ratings, contacting the team, income tracking, validation, sanitisation, JWT tampering, NoSQL-injection attempts and rate limiting.\n\nRun with: npm run test:api (from /backend). Requires the API to run over HTTPS (self-signed cert => use --insecure).",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
+
   "event": [
     {
       "listen": "test",
