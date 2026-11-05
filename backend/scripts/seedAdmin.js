@@ -34,7 +34,8 @@ async function main() {
 
   const existing = await User.findOne({ email });
   if (existing) {
-    if (existing.role === 'admin') {
+    if (existing.role === 'admin') 
+    {
       // Self-healing rather than a silent no-op: an admin created by an older version of this script
       // (before emailVerified existed, for example) should not be left permanently unable to log in
       // just because it already existed. Running this script always leaves the account in the same
@@ -50,9 +51,11 @@ async function main() {
     } else {
       throw new Error(`A ${existing.role} account already uses ${email}. Choose a different ADMIN_EMAIL.`);
     }
-  } else {
+  } else 
+  {
     // Provisioned directly by whoever runs this script (server/deploy access), not through public
     // registration, so there is no "prove you own this inbox" step to complete: mark it verified now.
+    
     await User.create({ name, email, passwordHash: await hashPassword(password), role: 'admin', emailVerified: true });
     console.log(`Admin account created for ${email}.`);
   }
