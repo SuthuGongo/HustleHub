@@ -8,10 +8,8 @@ A secure freelance marketplace built with the **MERN** stack (MongoDB, Express, 
 |---|---|
 | **Team (Group 1)** | Gongo Nobesuthu (ST10545758) · Yanga Bulane (ST10546237) · Sphamandla Godwill Nyanda (ST10543720) |
 | **GitHub** | https://github.com/SuthuGongo/HustleHub |
-| **Demo video** |(https://youtu.be/u8QFgNvxxLQ)
-                  
-                  https://drive.google.com/file/d/1Kf9bbaAGp1bJxGJW98tcHLMDEcqmKEX2/view?usp=sharing
-                  
+| **Demo video** | https://youtu.be/u8QFgNvxxLQ (backup copy: https://drive.google.com/file/d/1Kf9bbaAGp1bJxGJW98tcHLMDEcqmKEX2/view?usp=sharing) |
+| **Live site** | https://hustlehub-ygtq.onrender.com |
 
 ---
 
@@ -26,7 +24,7 @@ A secure freelance marketplace built with the **MERN** stack (MongoDB, Express, 
 7. [Role-based access control](#7-role-based-access-control)
 8. [Security measures](#8-security-measures)
 9. [Testing](#9-testing)
-10. [What changed since Part 1](#10-what-changed-since-part-1)
+10. [How the design evolved](#10-how-the-design-evolved)
 11. [Payments: simulated for this demo](#11-payments-simulated-for-this-demo)
 12. [Escrow: holding funds until confirmed or reviewed](#12-escrow-holding-funds-until-confirmed-or-reviewed)
 13. [Design decisions, trade-offs and known limitations](#13-design-decisions-trade-offs-and-known-limitations)
@@ -559,7 +557,7 @@ How it is enforced:
 
 Front-end specifics: the JWT is kept in `sessionStorage` (cleared when the tab closes), sent only in the `Authorization` header, never rendered or logged; any `401` on an authenticated call logs the user out; only the API's controlled `message` is ever shown to users.
 
-### 8a. Additional security features (Part 3)
+### 8a. Additional security features
 
 Four controls were added beyond the existing rate limits, two-factor authentication and input validation. Each closes a gap the earlier controls leave open.
 
@@ -692,9 +690,9 @@ npm test
 - **API client** – Bearer header, safe error messages, network failures, auto-logout on `401`
 - **Utilities** – entity decoding, formatting, validation rules
 
-## 10. What changed since Part 1
+## 10. How the design evolved
 
-| Area | Part 1 | Part 2 |
+| Area | Early version | Final version |
 |---|---|---|
 | Storage | JSON file (`users.json`) | **MongoDB** via Mongoose (users, gigs, bookings, transactions, reviews, messages, one-time codes) |
 | Roles | freelancer, client | + **admin** (seeded, not self-registrable); RBAC middleware |
@@ -755,7 +753,7 @@ held ──(freelancer marks completed)──▶ awaiting_review ──(client r
 
 ## 13. Design decisions, trade-offs and known limitations
 
-- **Browsing is public.** Earlier in Part 2 every gig route required a login. A real marketplace lets people look before they sign up, so reading gigs, categories and reviews is now public, while everything that *changes* data (create/edit/delete, booking, reviewing, income, admin) still needs a valid JWT and the right role. Public responses never include email addresses. If your marker prefers a fully closed system, revert by using `authenticate` instead of `optionalAuthenticate` on the four public routes in `routes/gigRoutes.js` and the matching Newman requests.
+- **Browsing is public.** Earlier in development every gig route required a login. A real marketplace lets people look before they sign up, so reading gigs, categories and reviews is now public, while everything that *changes* data (create/edit/delete, booking, reviewing, income, admin) still needs a valid JWT and the right role. Public responses never include email addresses. If your marker prefers a fully closed system, revert by using `authenticate` instead of `optionalAuthenticate` on the four public routes in `routes/gigRoutes.js` and the matching Newman requests.
 - **Ratings are denormalised.** Each gig stores `ratingAvg` and `ratingCount`, recomputed from its reviews whenever one is added, so browsing and sorting stay cheap. Recomputing from the source (rather than incrementing) avoids drift if two reviews arrive together.
 - **Seller profiles are minimal.** A gig page shows the seller's name, member-since date and simple stats. There are no seller profile pages, messaging or notifications yet.
 - **A flat, human palette.** Every colour lives in one block at the top of `frontend/src/styles/index.css`: a warm paper background (`--bg`), white surfaces, near-black ink, and a single deep-green accent (`--accent`). Gradients, glowing shadows, blurred blobs and floating showcase cards were removed on purpose because they read as generic and promotional. The landing page shows only real content - real categories with live counts and the newest real gigs, never invented reviews or testimonials - and carries no ratings or review counts at all (those live on gig pages and the browse page; an unrated gig just says "New" with no stars). To re-brand, change `--accent` and `--bg`; the receipt notches and focus rings follow automatically.
@@ -770,15 +768,14 @@ held ──(freelancer marks completed)──▶ awaiting_review ──(client r
 - **Payment is simulated, on purpose.** Real card processors (Stripe included) require an account based in a supported country, and South Africa isn't currently one of them; see [section 11](#11-payments-simulated-for-this-demo) for the full reasoning and how a real gateway could be added later.
 - **Motion is decorative and optional.** The card-close transition, floating cards, glare and card flip all switch off for users who prefer reduced motion, and no information depends on them.
 - **Booking + transaction without DB transactions.** MongoDB multi-document transactions require a replica set, which most student setups lack. The booking is created first and removed if the transaction insert fails (a compensating action). A unique index on `Transaction.booking` prevents double-charging.
-- **Money as decimal numbers.** Amounts are stored as Rand values rounded to two decimals, and validated to at most two decimals. Integer cents would be more robust for Part 3's tax maths; this can be migrated.
+- **Money as decimal numbers.** Amounts are stored as Rand values rounded to two decimals, and validated to at most two decimals. Integer cents would be more robust for the tax maths; this can be migrated.
 - **Escape on input, decode on display.** Text is HTML-escaped when stored, so even a non-React consumer can't be attacked with it. The UI decodes the entities (only into text nodes) so `&amp;` displays as `&`.
-- **JWT in `sessionStorage`.** Simple and works with the `Authorization` header design from Part 1, but readable by any script running on the page. The strict CSP is the main mitigation. HttpOnly cookies + CSRF protection or refresh-token rotation would be a stronger production design.
+- **JWT in `sessionStorage`.** Simple and works with the `Authorization` header design used from the start, but readable by any script running on the page. The strict CSP is the main mitigation. HttpOnly cookies + CSRF protection or refresh-token rotation would be a stronger production design.
 - **A logged-in session survives turning 2FA on or off.** Disabling 2FA re-authenticates with the password, but an *already-issued* token from before that change stays valid until it expires (an hour) - there is no server-side token blacklist. Resetting a forgotten password has the same property: the old password stops working immediately, but any token issued before the reset is not individually revoked.
-- **Dev-server CSP is slightly looser** (`unsafe-inline` for hot reload). Use `npm start` (production build + strict CSP) for demos and screenshots. Part 3's container will serve the same strict header set.
+- **Dev-server CSP is slightly looser** (`unsafe-inline` for hot reload). Use `npm start` (production build + strict CSP) for demos and screenshots. The container serves the same strict header set.
 - **Self-signed certificate.** Browsers warn once; a real deployment would use a certificate from a trusted CA.
 - **Rate limits are in memory** (per server process). Fine for a single instance; a multi-instance deployment would need a shared store such as Redis.
-- **Not yet built (Part 2 extras you may want):** seller profile pages, push/email notifications for a new chat message (delivery today is live-while-the-tab-is-open only, via the socket; nothing is emailed if you're away), a general "change my name or password while logged in" settings page (password can currently only change via the forgot-password flow), gig images, a real payment gateway (see §11), and an issue flag that automatically triggers a refund (today the issue flag - §7 - and the escrow dispute/refund flow - §12 - are two separate mechanisms; flagging an issue does not by itself move it into `disputed`).
-- **Not yet built (Part 3):** tax estimation, financial dashboard, structured logging of key events (only `[SECURITY]`/`[AUDIT]` console lines exist today), Docker, CI/CD, automated security scans, backend unit tests.
+- **Not built (possible extras):** seller profile pages, push/email notifications for a new chat message (delivery today is live-while-the-tab-is-open only, via the socket; nothing is emailed if you're away), a general "change my name or password while logged in" settings page (password can currently only change via the forgot-password flow), gig images, a real payment gateway (see §11), and an issue flag that automatically triggers a refund (today the issue flag - §7 - and the escrow dispute/refund flow - §12 - are two separate mechanisms; flagging an issue does not by itself move it into `disputed`).
 
 ## 14. Income dashboard and tax estimate
 
@@ -1029,8 +1026,8 @@ Left as it is: the login token is kept in `sessionStorage`, so a script that did
 | Weakness looked for | Status | How it is handled |
 |---|---|---|
 | Passwords stored badly | Fixed by design | bcrypt with 12 rounds; the hash is never selected by default and is removed from every JSON response |
-| Weak, common or breached passwords | Closed in Part 3 | Length, number and capital letter, plus a common-password list, no name or email inside the password, and a breach lookup that sends only a hash prefix (§8a) |
-| Guessing one account's password | Closed in Part 3 | Five wrong passwords lock the account for 15 minutes, even against the correct password; the lock is logged. Per-address rate limits sit on top (§8a, §8) |
+| Weak, common or breached passwords | Closed | Length, number and capital letter, plus a common-password list, no name or email inside the password, and a breach lookup that sends only a hash prefix (§8a) |
+| Guessing one account's password | Closed | Five wrong passwords lock the account for 15 minutes, even against the correct password; the lock is logged. Per-address rate limits sit on top (§8a, §8) |
 | Finding out which emails have accounts | Closed | The same message for an unknown email and a wrong password, with the same response time (a dummy hash is checked); the same reply from forgot-password whether or not the account exists |
 | Forged or tampered tokens | Closed | HS256 is fixed when signing and when checking, so an unsigned (`alg: none`) token or one signed with another key is refused; the secret must be set or the server will not start; tokens expire (default 1 hour) |
 | A role written inside the token | Closed | The role and the active flag are read from the database on every request, not from the token. A client token that claims admin gets 403; a disabled account loses access at once |
@@ -1136,7 +1133,10 @@ Render runs the app as one Docker web service built from the `Dockerfile` in the
 | `ADMIN_NAME`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` | the first administrator, created by the seed script |
 | `BETTERSTACK_SOURCE_TOKEN`, `BETTERSTACK_INGEST_HOST` | optional: sends the logs to Better Stack (section 18) |
 
-4. After the first deploy, open the **Shell** tab of the service and run `node scripts/seedAdmin.js` once to create the administrator.
+4. After the first deploy, create the administrator once by running `node scripts/seedAdmin.js` with `ADMIN_EMAIL`, `ADMIN_PASSWORD` and the same `MONGODB_URI` set (on Render's paid plans the **Shell** tab can do this; on the free plan run it from a computer, because it writes to the same Atlas database).
 
 The `SERVE_FRONTEND` and `FRONTEND_DIST` settings switch the hosting of the built app on and off. The pages get a Content-Security-Policy that only allows this origin, and API responses keep their own stricter one (`backend/src/utils/frontendHosting.js`, covered by `frontendHosting.test.js`). The pipeline builds this image on every push, in the Docker job.
 
+### Live demo and its limits
+
+The live site for the demonstration is https://hustlehub-ygtq.onrender.com (free plan, so the first request after a quiet period can take up to a minute). The demo runs with `NODE_ENV=development` because Render's free plan blocks outgoing mail on the standard SMTP ports, so verification codes are written to the server log instead of being emailed. In a real deployment `NODE_ENV=production` is used with working SMTP settings, and the API then refuses to start without them. This is a demonstration trade-off, not the intended production setup.

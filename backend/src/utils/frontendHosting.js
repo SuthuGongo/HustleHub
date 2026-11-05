@@ -39,15 +39,12 @@ function mountFrontend(app, distDir) {
 
   // Built files carry a hash in their name, so they can be cached for a year. index.html must never be.
   app.use('/assets', express.static(path.join(root, 'assets'), { immutable: true, maxAge: '1y', index: false }));
+  // Real files at the top level (favicon, robots.txt) are served by the static handler, which refuses anything outside the folder.
+  app.use(express.static(root, { index: false, dotfiles: 'ignore', maxAge: 0 }));
   app.use((req, res, next) => {
     if ((req.method !== 'GET' && req.method !== 'HEAD') || req.path.startsWith('/api')) return next();
     res.set('Cache-Control', 'no-cache');
     res.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()');
-    // A real file at the top level (favicon, robots.txt) is sent as it is; any other page is the single-page app.
-    const candidate = path.join(root, path.normalize(req.path));
-    if (candidate.startsWith(root + path.sep) && fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
-      return res.sendFile(candidate);
-    }
     return res.sendFile(indexFile);
   });
 }

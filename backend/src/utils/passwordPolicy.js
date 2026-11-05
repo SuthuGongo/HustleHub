@@ -40,7 +40,7 @@ function containsPersonalDetail(password, { email, name } = {}) {
 // answers with every hash that starts the same way (hundreds of them) and the comparison happens here, so the
 // service never learns which password, or even which hash, was being checked.
 async function breachCount(password, fetchImpl = fetch) {
-  const sha1 = crypto.createHash('sha1').update(String(password)).digest('hex').toUpperCase();
+  const sha1 = crypto.createHash('sha1').update(String(password)).digest('hex').toUpperCase(); // NOSONAR: the breach-check API only accepts a SHA-1 prefix; stored passwords use bcrypt
   const prefix = sha1.slice(0, 5);
   const suffix = sha1.slice(5);
   const res = await fetchImpl(`https://api.pwnedpasswords.com/range/${prefix}`, {

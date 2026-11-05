@@ -23,7 +23,7 @@ function readLog() {
 }
 
 async function raw(method, path, { token, body, headers = {}, text } = {}) {
-  const res = await fetch(base + path, { method, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...headers }, body: text ?? (body ? JSON.stringify(body) : undefined) });
+  const res = await fetch(base + path, { method, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...headers }, body: text ?? (body ? JSON.stringify(body) : undefined) }); // NOSONAR: developer attack-test script, run against our own server
   let json = {}; try {
       json = await res.json();
     } catch {
