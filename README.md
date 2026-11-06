@@ -8,8 +8,8 @@ A secure freelance marketplace built with the **MERN** stack (MongoDB, Express, 
 |---|---|
 | **Team (Group 1)** | Gongo Nobesuthu (ST10545758) · Yanga Bulane (ST10546237) · Sphamandla Godwill Nyanda (ST10543720) |
 | **GitHub** | https://github.com/SuthuGongo/HustleHub |
-| **Demo video** |(https://vimeo.com/reviews/70ac46e1-75f1-4d96-a92d-fc15aee33f08/videos/1244191944) 
-(backup copy: https://drive.google.com/file/d/1Kf9bbaAGp1bJxGJW98tcHLMDEcqmKEX2/view?usp=sharing) |
+| **Demo video** | https://vimeo.com/reviews/70ac46e1-75f1-4d96-a92d-fc15aee33f08/videos/1244191944 |
+| **backup copy** | https://drive.google.com/file/d/1Kf9bbaAGp1bJxGJW98tcHLMDEcqmKEX2/view?usp=sharing) |
 | **Live site** | https://hustlehub-ygtq.onrender.com |
 
 ---
